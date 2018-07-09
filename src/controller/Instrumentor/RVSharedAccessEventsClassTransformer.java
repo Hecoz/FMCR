@@ -40,12 +40,12 @@ public class RVSharedAccessEventsClassTransformer extends ClassVisitor {
     public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
 
         String sig_var = (classname+"."+name).replace("/", ".");
-
+        //in fact this operation is add the sig_var to a global set save the variables name and id in the RVGlobalStateForInstrumentation
         RVGlobalStateForInstrumentation.instance.getVariableId(sig_var);
 
         //Opcodes.ACC_FINAL
-        if((access & Opcodes.ACC_VOLATILE)!=0)
-        {//volatile
+        if((access & Opcodes.ACC_VOLATILE)!=0) {
+            //volatile
             RVGlobalStateForInstrumentation.instance.addVolatileVariable(sig_var);
         }
 
@@ -59,7 +59,7 @@ public class RVSharedAccessEventsClassTransformer extends ClassVisitor {
     public MethodVisitor visitMethod(int access, String name, String desc,String signature, String[] exceptions) {
 
         MethodVisitor mv = cv.visitMethod(access&(~Opcodes.ACC_SYNCHRONIZED), name, desc, signature,exceptions);
-        //mv = new JSRInlinerAdapter(mv, access, name, desc, signature, exceptions);
+
         if (mv != null) {
             boolean isSynchronized = false;
             boolean isStatic = false;
@@ -80,6 +80,7 @@ public class RVSharedAccessEventsClassTransformer extends ClassVisitor {
                     isSynchronized,
                     isStatic,
                     possibleRunMethod);
+
             gmVisitor = (RVSharedAccessEventsMethodTransformer) mv;
         }
         return mv;

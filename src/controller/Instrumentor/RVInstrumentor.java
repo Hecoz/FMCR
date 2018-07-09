@@ -3,11 +3,17 @@ import jdk.internal.org.objectweb.asm.ClassWriter;
 import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.tree.*;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
+import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class RVInstrumentor {
@@ -19,6 +25,7 @@ public class RVInstrumentor {
     private static final String INSTRUMENTATION_PACKAGES_DEFAULT = "default";
     private static final String DOT = ".";
     private static final String SEMICOLON = ";";    //通过 ; 来分割 properties 中的字符串
+    private static final String JUC_DOTS = "java.util.concurrent";
 
     public static String logClass;    //根据指定的模型检查器选择运行时插桩程序
 
@@ -49,7 +56,7 @@ public class RVInstrumentor {
      * @param options
      * @param ins
      */
-    public static void premain(String options, Instrumentation ins) {
+    public static void premain(String options, Instrumentation inst) {
 
         /**
          *  01: get FMCRProperties
@@ -91,35 +98,71 @@ public class RVInstrumentor {
         logClass = "controller/Instrumentor/RVRunTime";
 
         //注册我自己的字节码转换器
-        ins.addTransformer(new ClassFileTransformer() {
+        inst.addTransformer(new ClassFileTransformer() {
             @Override
             public byte[] transform(ClassLoader loader,
                                     String className,
                                     Class<?> classBeingRedefined,
                                     ProtectionDomain protectionDomain,
                                     byte[] classfileBuffer) throws IllegalClassFormatException {
+                try {
+
+                    /**
+                     * 首先判断当前的类是否需要被插桩
+                     * If the package is included in the packages to instrument,
+                     * or the class is included in the classes to instrument,
+                     * instrument the class
+                     */
+                    if(shouldInstrumentClass(className)){
+
+                        //System.out.println("Instrument:" + className);
+                        ClassReader classReader = new ClassReader(classfileBuffer); //bytes is the .class we are going to read
+                        ClassWriter classWriter = new ExtendedClassWriter(classReader, ClassWriter.COMPUTE_FRAMES);//ClassWriter.COMPUTE_FRAMES 值为2
+
+                        //RVSharedAccessEventsClassTransformer Adapter 插桩类 继承classVisitor
+                        RVSharedAccessEventsClassTransformer rvsharedAccessEventsTransformer = new RVSharedAccessEventsClassTransformer(classWriter);
+
+                        classReader.accept(rvsharedAccessEventsTransformer, ClassReader.EXPAND_FRAMES);
+
+                        classfileBuffer = classWriter.toByteArray();
 
 
-                /**
-                 * 首先判断当前的类是否需要被插桩
-                 * If the package is included in the packages to instrument,
-                 * or the class is included in the classes to instrument,
-                 * instrument the class
-                 */
-                if(shouldInstrumentClass(className)){
-
-                    //System.out.println("Instrument:" + className);
-                    ClassReader classReader = new ClassReader(classfileBuffer); //bytes is the .class we are going to read
-                    ClassWriter classWriter = new ExtendedClassWriter(classReader, ClassWriter.COMPUTE_FRAMES);//ClassWriter.COMPUTE_FRAMES 值为2
-
-                    //RVSharedAccessEventsClassTransformer 插桩类 继承classVisitor
-                    RVSharedAccessEventsClassTransformer rvsharedAccessEventsTransformer = new RVSharedAccessEventsClassTransformer(classWriter);
-
-
+                        // - - - - - - - - - -  输出插桩后的class文件 - - - - - - - - - - - - - - - - - - -
+                        File file = new File("./src/test/ASM-Test/Class" + className + ".class");
+                        FileOutputStream fOutputStream;
+                        try {
+                            fOutputStream = new FileOutputStream(file);
+                            fOutputStream.write(classfileBuffer);
+                            fOutputStream.close();
+                        } catch (IOException e) {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
+                        // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                    }
+                } catch (Throwable th) {
+                    th.printStackTrace();
+                    System.err.println(th.getMessage());
                 }
-                return new byte[0];
+                return classfileBuffer;
             }
-        });
+        },true);
+
+        /** Re-transform already loaded java.util.concurrent classes */
+//        try {
+//            List<Class<?>> classesToReTransform = new ArrayList<Class<?>>();
+//            for (Class<?> loadedClass : inst.getAllLoadedClasses()) {
+//
+//                if (inst.isModifiableClass(loadedClass) && loadedClass.getPackage().getName().startsWith(JUC_DOTS)) {
+//                    classesToReTransform.add(loadedClass);
+//                }
+//            }
+//            inst.retransformClasses(classesToReTransform.toArray(new Class<?>[classesToReTransform.size()]));
+//        } catch (UnmodifiableClassException e) {
+//            e.printStackTrace();
+//            System.err.println("Unable to modify a pre-loaded java.util.concurrent class!");
+//            System.exit(2);
+//        }
     }
 
     /**
