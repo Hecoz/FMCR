@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+Premain-Class: RVInstrumentor
+Can-Redefine-Classes: true
+Can-Retransform-Classes: true
+Created-By: 1.8.0_45 (Oracle Corporation)
+
