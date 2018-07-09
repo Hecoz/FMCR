@@ -35,7 +35,7 @@ public class TestDeadlock {
         return this.field;
     }
 
-    @Test
+    //@Test
     public void test() throws InterruptedException {
 
         final TestDeadlock counter = new TestDeadlock();
