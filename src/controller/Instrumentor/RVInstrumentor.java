@@ -20,6 +20,8 @@ public class RVInstrumentor {
     private static final String DOT = ".";
     private static final String SEMICOLON = ";";    //通过 ; 来分割 properties 中的字符串
 
+    public static String logClass;    //根据指定的模型检查器选择运行时插桩程序
+
     /**
      *  packages and classes which needed to instrument or ignore
      */
@@ -49,7 +51,9 @@ public class RVInstrumentor {
      */
     public static void premain(String options, Instrumentation ins) {
 
-        //get FMCRProperties
+        /**
+         *  01: get FMCRProperties
+         */
         FMCRProperties fmcrProperties = FMCRProperties.getFmcrProperties();
         //IGNORE
         storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_PACKAGES_IGNORE_PREFIXES_KEY),pckgPrefixesToIgnore);
@@ -62,6 +66,30 @@ public class RVInstrumentor {
         storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_CLASSES_IGNORE_PREFIXES_KEY),classPrefixesToAllow);
         storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_CLASSES_ALLOW_KEY),classesToAllow);
 
+        /**
+         *  02: set the memory model
+         */
+        String memory_model = System.getProperty("memory_model");
+        if(memory_model != null && !memory_model.isEmpty()){
+
+            RVConfig.instance.mode = memory_model;
+        }
+
+        /**
+         *  03: setup the configuration here, Configuration is located in engine.config
+         */
+        final boolean debug = Boolean.parseBoolean(System.getProperty("debug")); //debug :false
+        final boolean static_opt = Boolean.parseBoolean(System.getProperty("static_opt"));  //static_opt :false
+        Configuration.DEBUG = debug;
+        Configuration.Optimize = static_opt;
+        Configuration.setup();
+
+
+        /**
+         * 04: choose the runtime instrumentation based on the model checker specified
+         */
+        logClass = "controller/Instrumentor/RVRunTime";
+
         //注册我自己的字节码转换器
         ins.addTransformer(new ClassFileTransformer() {
             @Override
@@ -72,10 +100,6 @@ public class RVInstrumentor {
                                     byte[] classfileBuffer) throws IllegalClassFormatException {
 
 
-
-
-
-
                 /**
                  * 首先判断当前的类是否需要被插桩
                  * If the package is included in the packages to instrument,
@@ -84,7 +108,14 @@ public class RVInstrumentor {
                  */
                 if(shouldInstrumentClass(className)){
 
-                    System.out.println("Instrument:" + className);
+                    //System.out.println("Instrument:" + className);
+                    ClassReader classReader = new ClassReader(classfileBuffer); //bytes is the .class we are going to read
+                    ClassWriter classWriter = new ExtendedClassWriter(classReader, ClassWriter.COMPUTE_FRAMES);//ClassWriter.COMPUTE_FRAMES 值为2
+
+                    //RVSharedAccessEventsClassTransformer 插桩类 继承classVisitor
+                    RVSharedAccessEventsClassTransformer rvsharedAccessEventsTransformer = new RVSharedAccessEventsClassTransformer(classWriter);
+
+
                 }
                 return new byte[0];
             }

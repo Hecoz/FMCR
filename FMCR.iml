@@ -6,6 +6,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/controller/Instrumentor" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/test/ASM-Test" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/controller" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/engine/config" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
