@@ -22,7 +22,9 @@ public class RVGlobalStateForInstrumentation {
 
     //visitField save volatile Variables
     public HashSet<String> volatileVariables = new HashSet<String>();
-
+    //unknown
+    public ConcurrentHashMap<String,Integer> stmtSigIdMap = new ConcurrentHashMap<String,Integer>();
+    public static HashMap<Integer, String> stmtIdSigMap = new HashMap<Integer, String>();
 
 
     /**
@@ -63,6 +65,23 @@ public class RVGlobalStateForInstrumentation {
                 }
             }
         }
+    }
+
+
+    public int getLocationId(String sig)
+    {
+        if(stmtSigIdMap.get(sig)==null)
+        {
+            synchronized (stmtSigIdMap) {
+                if(stmtSigIdMap.get(sig)==null) {
+                    int size = stmtSigIdMap.size() + 1;
+                    stmtSigIdMap.put(sig, size);
+                    stmtIdSigMap.put(size,sig);
+                }
+            }
+        }
+
+        return stmtSigIdMap.get(sig);
     }
 
     /**

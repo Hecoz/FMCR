@@ -54,7 +54,7 @@ public class RVInstrumentor {
      * 在main函数执行前，执行的函数
      *
      * @param options
-     * @param ins
+     * @param inst
      */
     public static void premain(String options, Instrumentation inst) {
 
@@ -99,6 +99,7 @@ public class RVInstrumentor {
 
         //注册我自己的字节码转换器
         inst.addTransformer(new ClassFileTransformer() {
+
             @Override
             public byte[] transform(ClassLoader loader,
                                     String className,
