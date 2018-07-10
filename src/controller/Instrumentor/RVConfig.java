@@ -32,6 +32,41 @@ public class RVConfig {
     public final String DESC_LOG_THREAD_SLEEP = "()V";
 
 
+    /**
+     * In the class:RVSharedAccessEventsMethodTransformer   function:visitFieldInsn
+     * add this function names and descriptions in the RVRuntime to instrument class
+     */
+    public final String BEFORE_FIELD_ACCESS = "beforeFieldAccess";
+    public final String BOOL_3STRINGS_VOID = "(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
+
+    public final String AFTER_FIELD_ACCESS = "afterFieldAccess";
+
+    public final String LOG_FIELD_ACCESS = "logFieldAcc";
+    public final String DESC_LOG_FIELD_ACCESS = "(ILjava/lang/Object;ILjava/lang/Object;Z)V";
+
+    public final String LOG_INIT_WRITE_ACCESS = "logInitialWrite";
+    public final String DESC_LOG_INIT_WRITE_ACCESS = "(ILjava/lang/Object;ILjava/lang/Object;)V";
+
+
+
+    public final String BEFORE_ARRAY_ACCESS = "beforeArrayAccess";
+    public final String AFTER_ARRAY_ACCESS = "afterArrayAccess";
+    public final String BOOL_VOID = "(Z)V";
+
+    public final String LOG_ARRAY_ACCESS = "logArrayAcc";
+    public final String DESC_LOG_ARRAY_ACCESS = "(ILjava/lang/Object;ILjava/lang/Object;Z)V";
+
+    public final String LOG_UNLOCK_STATIC = "logStaticSyncUnlock";
+    public final String DESC_LOG_UNLOCK_STATIC = "(II)V";
+
+    public final String LOG_THREAD_BEGIN = "logThreadBegin";
+    public final String DESC_LOG_THREAD_BEGIN = "()V";
+
+    public final String LOG_THREAD_END = "logThreadEnd";
+    public final String DESC_LOG_THREAD_END = "()V";
+
+    public final String LOG_LOCK_STATIC = "logStaticSyncLock";
+    public final String DESC_LOG_LOCK_STATIC = "(II)V";
 
 
 }

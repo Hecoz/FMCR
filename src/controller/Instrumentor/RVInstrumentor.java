@@ -1,3 +1,4 @@
+import exploration.Scheduler;
 import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import jdk.internal.org.objectweb.asm.Opcodes;
@@ -49,6 +50,8 @@ public class RVInstrumentor {
     public static Set<String> packagesThatWereInstrumented = new HashSet<String>();
     public static Set<String> packagesThatWereNOTInstrumented = new HashSet<String>();
 
+    //
+    public static final String INSTR_EVENTS_RECEIVER = Scheduler.class.getName().replace(DOT, SLASH);
 
     /**
      * 在main函数执行前，执行的函数
@@ -70,7 +73,7 @@ public class RVInstrumentor {
         //ALLOW
         storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_PACKAGES_ALLOW_PREFIXES_KEY),pckgPrefixesToAllow);
         storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_PACKAGES_ALLOW_KEY),pckgsToAllow);
-        storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_CLASSES_IGNORE_PREFIXES_KEY),classPrefixesToAllow);
+        storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_CLASSES_ALLOW_PREFIXES_KEY),classPrefixesToAllow);
         storePropertyValues(fmcrProperties.getProperty(FMCRProperties.INSTRUMENTATION_CLASSES_ALLOW_KEY),classesToAllow);
 
         /**
