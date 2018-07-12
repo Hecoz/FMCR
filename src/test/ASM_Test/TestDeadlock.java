@@ -1,3 +1,5 @@
+package test.ASM_Test;
+
 import org.junit.Test;
 
 public class TestDeadlock {

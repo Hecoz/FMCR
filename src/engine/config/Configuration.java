@@ -1,3 +1,5 @@
+package engine.config;
+
 public class Configuration {
 
     public static String class_name = null;

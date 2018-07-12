@@ -1,3 +1,7 @@
+package controller.Instrumentor;
+
+import controller.Instrumentor.RVConfig;
+import controller.Instrumentor.RVInstrumentor;
 import jdk.internal.org.objectweb.asm.Label;
 import jdk.internal.org.objectweb.asm.MethodVisitor;
 import jdk.internal.org.objectweb.asm.Opcodes;
@@ -249,9 +253,6 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                 System.err.println("Unknown method invocation opcode "+opcode);
                 System.exit(1);
         }
-
-
-        super.visitMethodInsn(opcode, owner, name, desc, b);
     }
 
 
@@ -450,8 +451,6 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                 System.err.println("Unknown field access opcode " + opcode);
                 System.exit(1);
         }
-
-        super.visitFieldInsn(opcode, owner, name, desc);
     }
 
     /**

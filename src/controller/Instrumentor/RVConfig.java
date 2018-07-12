@@ -1,3 +1,5 @@
+package controller.Instrumentor;
+
 public class RVConfig {
 
     public static final RVConfig instance = new RVConfig();

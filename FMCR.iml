@@ -3,15 +3,12 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/src/controller/Instrumentor" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/src/test/ASM-Test" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/src/controller" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/src/engine/config" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="magent" level="project" />
     <orderEntry type="library" name="junit" level="project" />
     <orderEntry type="library" name="imunit-1.5" level="project" />
+    <orderEntry type="library" name="magent" level="project" />
   </component>
 </module>

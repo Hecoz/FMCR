@@ -1,4 +1,8 @@
-import exploration.Scheduler;
+package controller.Instrumentor;
+
+import controller.FMCRProperties;
+import controller.exploration.Scheduler;
+import engine.config.Configuration;
 import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import jdk.internal.org.objectweb.asm.Opcodes;
@@ -117,9 +121,10 @@ public class RVInstrumentor {
                      * or the class is included in the classes to instrument,
                      * instrument the class
                      */
+                    System.out.println(className);
                     if(shouldInstrumentClass(className)){
 
-                        //System.out.println("Instrument:" + className);
+                        System.out.println("Instrument:" + className);
                         ClassReader classReader = new ClassReader(classfileBuffer); //bytes is the .class we are going to read
                         ClassWriter classWriter = new ExtendedClassWriter(classReader, ClassWriter.COMPUTE_FRAMES);//ClassWriter.COMPUTE_FRAMES 值为2
 
@@ -132,7 +137,7 @@ public class RVInstrumentor {
 
 
                         // - - - - - - - - - -  输出插桩后的class文件 - - - - - - - - - - - - - - - - - - -
-                        File file = new File("./src/test/ASM-Test/Class" + className + ".class");
+                        File file = new File("./src/test/ClassesGenerated/" + className.replace("/",".") + ".class");
                         FileOutputStream fOutputStream;
                         try {
                             fOutputStream = new FileOutputStream(file);

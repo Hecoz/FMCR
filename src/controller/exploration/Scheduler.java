@@ -1,4 +1,4 @@
-package exploration;
+package controller.exploration;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.lang.management.ThreadInfo;
@@ -26,4 +26,18 @@ public class Scheduler {
     private static SortedSet<ThreadInfo> pausedThreadInfos;
     private static Set<ThreadInfo> blockedThreadInfos;
 
+
+    /**
+     * Called before a field is accessed, it first needs to get the lock
+     * it is instrumented to the class
+     * @param isRead
+     * @param owner
+     * @param name
+     * @param desc
+     */
+    public static void beforeFieldAccess(boolean isRead, String owner, String name, String desc) {
+//        if (exploring) {
+//            beforeEvent(new FieldAccessEventDesc(isRead ? EventType.READ : EventType.WRITE, owner, name, desc), true);
+//        }
+    }
 }

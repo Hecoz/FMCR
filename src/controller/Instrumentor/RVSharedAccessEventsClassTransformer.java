@@ -1,3 +1,5 @@
+package controller.Instrumentor;
+
 import jdk.internal.org.objectweb.asm.*;
 
 public class RVSharedAccessEventsClassTransformer extends ClassVisitor {

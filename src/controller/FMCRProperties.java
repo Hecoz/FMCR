@@ -1,3 +1,5 @@
+package controller;
+
 import java.io.IOException;
 import java.util.Properties;
 
@@ -29,7 +31,7 @@ public class FMCRProperties extends Properties {
      *  properties related property
      */
     public static final String PROPERTIES_KEY = "mcr.properties";
-    public static final String DEFAULT_PROPERTIES = "/default.properties";
+    public static final String DEFAULT_PROPERTIES = "./default.properties";
 
     private static FMCRProperties fmcrProperties;
 
