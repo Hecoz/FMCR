@@ -1,8 +1,29 @@
 package controller.Instrumentor;
 
-import controller.exploration.Scheduler;
+import java.util.HashMap;
+import java.util.Vector;
 
 public class RVRunTime {
+
+    public static HashMap<Long, String> threadTidNameMap;   //线程 ID 与对应名字的 map
+    public static HashMap<Long, Integer> threadTidIndexMap;  //线程 ID 与对应的索引的 map
+    final static String MAIN_NAME = "0";
+    public static long globalEventID;
+    public static int currentIndex = 0;
+
+    public static Vector<String> failure_trace = new Vector<String>();
+
+
+
+    public static void init() {
+        long tid = Thread.currentThread().getId();
+        threadTidNameMap = new HashMap<Long, String>();
+        threadTidNameMap.put(tid, MAIN_NAME);
+        threadTidIndexMap = new HashMap<Long, Integer>();
+        threadTidIndexMap.put(tid, 1);
+        globalEventID = 0;
+    }
+
 
 
     public static void logInitialWrite(int ID, final Object o, int SID, final Object v) {

@@ -1,6 +1,7 @@
 package controller.Instrumentor;
 
-import jdk.internal.org.objectweb.asm.*;
+
+import org.objectweb.asm.*;
 
 public class RVSharedAccessEventsClassTransformer extends ClassVisitor {
 
@@ -42,6 +43,7 @@ public class RVSharedAccessEventsClassTransformer extends ClassVisitor {
     public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
 
         String sig_var = (classname+"."+name).replace("/", ".");
+        System.out.println(sig_var);
         //in fact this operation is add the sig_var to a global set save the variables name and id in the RVGlobalStateForInstrumentation
         RVGlobalStateForInstrumentation.instance.getVariableId(sig_var);
 

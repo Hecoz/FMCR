@@ -1,6 +1,6 @@
 package controller.Instrumentor;
 
-import jdk.internal.org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassReader;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -27,6 +27,9 @@ public class RVGlobalStateForInstrumentation {
     //unknown
     public ConcurrentHashMap<String,Integer> stmtSigIdMap = new ConcurrentHashMap<String,Integer>();
     public static HashMap<Integer, String> stmtIdSigMap = new HashMap<Integer, String>();
+
+    //define used at FMCRStrategy
+    public HashSet<String> volatilevariables = new HashSet<String>();
 
 
     /**

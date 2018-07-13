@@ -6,7 +6,6 @@ public class RVConfig {
 
     public String mode = "SC";   //default: sequential consistency memory model
 
-
     /**
      * In the class:RVSharedAccessEventsMethodTransformer   function:visitMethodInsn
      * add this function names and descriptions in the RVRuntime to instrument class

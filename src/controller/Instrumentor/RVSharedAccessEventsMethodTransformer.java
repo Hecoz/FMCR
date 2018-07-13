@@ -1,12 +1,11 @@
 package controller.Instrumentor;
 
-import controller.Instrumentor.RVConfig;
-import controller.Instrumentor.RVInstrumentor;
-import jdk.internal.org.objectweb.asm.Label;
-import jdk.internal.org.objectweb.asm.MethodVisitor;
-import jdk.internal.org.objectweb.asm.Opcodes;
-import jdk.internal.org.objectweb.asm.Type;
-import jdk.internal.org.objectweb.asm.commons.AdviceAdapter;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.commons.AdviceAdapter;
+
 
 public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter implements Opcodes {
 
@@ -81,7 +80,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
     }
 
     @Override
-    public void visitMethodInsn(int opcode, String owner, String name, String desc,boolean b) {
+    public void visitMethodInsn(int opcode, String owner, String name, String desc) {
 
         String sig_loc = source + "|" + (className+"|"+methodSignature+"|"+line_cur).replace("/", ".");
         int ID  = RVGlobalStateForInstrumentation.instance.getLocationId(sig_loc);
@@ -112,11 +111,12 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_THREAD_BEFORE_START,
-                                RVConfig.instance.DESC_LOG_THREAD_START,b);
+                                RVConfig.instance.DESC_LOG_THREAD_START);
 
-                        mv.visitMethodInsn(opcode, owner, name, desc,b);
+                        mv.visitMethodInsn(opcode, owner, name, desc);
                     }else if(name.equals("join") &&desc.equals("()V")) {
                         //线程 join 插桩
+                        maxindex_cur++;
                         int index = maxindex_cur;
                         mv.visitVarInsn(ASTORE, index);
 
@@ -124,10 +124,10 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                         mv.visitVarInsn(ALOAD, index);
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_THREAD_JOIN,
-                                RVConfig.instance.DESC_LOG_THREAD_JOIN,b);
+                                RVConfig.instance.DESC_LOG_THREAD_JOIN);
 
                     }else {
-                        mv.visitMethodInsn(opcode, owner, name, desc,b);
+                        mv.visitMethodInsn(opcode, owner, name, desc);
                     }
                 }else{
 
@@ -143,7 +143,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                         mv.visitVarInsn(ALOAD, index);
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_WAIT,
-                                RVConfig.instance.DESC_LOG_WAIT,b);
+                                RVConfig.instance.DESC_LOG_WAIT);
 
                     } else if (name.equals("notify") && desc.equals("()V")) {
 
@@ -155,7 +155,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                         mv.visitVarInsn(ALOAD, index);
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_NOTIFY,
-                                RVConfig.instance.DESC_LOG_NOTIFY,b);
+                                RVConfig.instance.DESC_LOG_NOTIFY);
 
                     } else if (name.equals("notifyAll") && desc.equals("()V")) {
 
@@ -167,7 +167,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                         mv.visitVarInsn(ALOAD, index);
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_NOTIFY_ALL,
-                                RVConfig.instance.DESC_LOG_NOTIFY,b);
+                                RVConfig.instance.DESC_LOG_NOTIFY);
                     }else if (name.equals("lock") && desc.equals("()V")) {
 
                         maxindex_cur++;
@@ -179,7 +179,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_LOCK_INSTANCE,
-                                RVConfig.instance.DESC_LOG_LOCK_INSTANCE,b);
+                                RVConfig.instance.DESC_LOG_LOCK_INSTANCE);
                     }else if (name.equals("unlock") && desc.equals("()V")) {
 
                         maxindex_cur++;
@@ -190,7 +190,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_UNLOCK_INSTANCE,
-                                RVConfig.instance.DESC_LOG_UNLOCK_INSTANCE,b);
+                                RVConfig.instance.DESC_LOG_UNLOCK_INSTANCE);
                     }else if (name.equals("lockInterruptibly") && desc.equals("()V")) {
 
                         maxindex_cur++;
@@ -202,7 +202,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
                         mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                                 RVConfig.instance.LOG_LOCK_INSTANCE,
-                                RVConfig.instance.DESC_LOG_LOCK_INSTANCE,b);
+                                RVConfig.instance.DESC_LOG_LOCK_INSTANCE);
                     }else
                         mv.visitMethodInsn(opcode, owner, name, desc);
                 }
@@ -214,7 +214,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                         &&name.equals("sleep") && (desc.equals(("(J)V")) || desc.equals("(JI)V"))) {
                     mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                             RVConfig.instance.LOG_THREAD_SLEEP,
-                            RVConfig.instance.DESC_LOG_THREAD_SLEEP,b);
+                            RVConfig.instance.DESC_LOG_THREAD_SLEEP);
                 }
 
             case INVOKESPECIAL:
@@ -231,7 +231,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
                     mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                             RVConfig.instance.LOG_LOCK_INSTANCE,
-                            RVConfig.instance.DESC_LOG_LOCK_INSTANCE,b);
+                            RVConfig.instance.DESC_LOG_LOCK_INSTANCE);
                 }
                 else if (name.equals("unlock") && desc.equals("()V")) {
 
@@ -243,10 +243,10 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
                     mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                             RVConfig.instance.LOG_UNLOCK_INSTANCE,
-                            RVConfig.instance.DESC_LOG_UNLOCK_INSTANCE,b);
+                            RVConfig.instance.DESC_LOG_UNLOCK_INSTANCE);
                 }
                 else {
-                    mv.visitMethodInsn(opcode, owner, name, desc,b);
+                    mv.visitMethodInsn(opcode, owner, name, desc);
                 }
                 break;
             default:
@@ -257,6 +257,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
 
     private void addBipushInsn(MethodVisitor mv, int val) {
+
         switch (val) {
             case 0:
                 mv.visitInsn(ICONST_0);
@@ -561,6 +562,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 	 * log field access
 	 */
     public void logFieldAccess(String desc, int ID, int SID, int index){
+
         addBipushInsn(mv, ID);
         mv.visitInsn(ACONST_NULL);
         addBipushInsn(mv, SID);
@@ -583,6 +585,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 
     @Override
     public void visitVarInsn(int opcode, int var) {
+
         if (var > maxindex_cur) {
             maxindex_cur = var;
         }

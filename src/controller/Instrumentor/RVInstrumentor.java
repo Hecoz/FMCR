@@ -3,10 +3,9 @@ package controller.Instrumentor;
 import controller.FMCRProperties;
 import controller.exploration.Scheduler;
 import engine.config.Configuration;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.ClassWriter;
-import jdk.internal.org.objectweb.asm.Opcodes;
-import jdk.internal.org.objectweb.asm.tree.*;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.ClassReader;
+
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -14,11 +13,8 @@ import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
-import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class RVInstrumentor {
@@ -121,11 +117,10 @@ public class RVInstrumentor {
                      * or the class is included in the classes to instrument,
                      * instrument the class
                      */
-                    System.out.println(className);
                     if(shouldInstrumentClass(className)){
 
-                        System.out.println("Instrument:" + className);
-                        ClassReader classReader = new ClassReader(classfileBuffer); //bytes is the .class we are going to read
+                        System.err.println("Instrumented (这货需要被插桩🙃️) " + className);
+                        ClassReader classReader = new ClassReader(classfileBuffer);     //bytes is the .class we are going to read
                         ClassWriter classWriter = new ExtendedClassWriter(classReader, ClassWriter.COMPUTE_FRAMES);//ClassWriter.COMPUTE_FRAMES 值为2
 
                         //RVSharedAccessEventsClassTransformer Adapter 插桩类 继承classVisitor

@@ -1,7 +1,10 @@
 package test.ASM_Test;
 
+import controller.exploration.JUnit4MCRRunner;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
+@RunWith(JUnit4MCRRunner.class)
 public class TestDeadlock {
 
     private int field = 0;
@@ -37,7 +40,7 @@ public class TestDeadlock {
         return this.field;
     }
 
-    //@Test
+    @Test
     public void test() throws InterruptedException {
 
         final TestDeadlock counter = new TestDeadlock();
@@ -68,5 +71,4 @@ public class TestDeadlock {
     public static void main(String[] args) throws InterruptedException {
         new TestDeadlock().test();
     }
-
 }
