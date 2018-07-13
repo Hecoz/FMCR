@@ -2,7 +2,6 @@ package controller.Instrumentor;
 
 import controller.exploration.Scheduler;
 import controller.scheduling.strategy.MCRStrategy;
-import engine.graph.Queue;
 import engine.trace.*;
 
 import java.util.HashMap;
@@ -46,12 +45,8 @@ public class RVRunTime {
     public static void updateFieldAcc(int ID, final Object o, int SID,
             final Object v, final boolean write, long tid) {
 
-
         //Scheduler.beforeFieldAccess(!write, "owner", "name", "desc");
-
         Trace trace = MCRStrategy.getTrace();
-        
-        
 
         // Use <= instead of < because currentIndex is increased after this
         // function call
@@ -157,7 +152,6 @@ public class RVRunTime {
         RVRunTime.failure_trace.add(threadName + "_" + label + ":" + type);
 	
 //        RVRunTime.failure_trace.add(label);
-		
 		// Use <= instead of < because currentIndex is increased after this
 		// function call
 		if ( MCRStrategy.schedulePrefix.size() <= currentIndex++|| MCRStrategy.fullTrace) 
@@ -166,7 +160,6 @@ public class RVRunTime {
 //	        String fileName = frame.getFileName();
 //	        int line = frame.getLineNumber();
 //	        String label = fileName+":"+Integer.toString(line);
-		    
 			globalEventID++;
 			if (isPrim(v)) 
 			{
@@ -243,7 +236,6 @@ public class RVRunTime {
 //	    for (int i = 0; i < aElements.length; i++) {
 //	        System.err.println(aElements[i].toString());
 //        }
-	    
 
 	    Trace trace = MCRStrategy.getTrace();
 	    if (trace ==null) {
@@ -251,16 +243,7 @@ public class RVRunTime {
 	        //the trace is null when mcr is run from the terminal
             return;
         }
-//	    while(trace == null){
-//	        try {
-//                Thread.sleep(100);
-//            } catch (InterruptedException e) {
-//                // TODO Auto-generated catch block
-//                e.printStackTrace();
-//            }
-//	        Thread.yield();
-//	        trace = MCRStrategy.getTrace();
-//	    }
+
 	    if (isPrim(v)) {
             
             trace.updateInitWriteValueToAddress(o == null ? "." + SID

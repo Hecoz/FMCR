@@ -192,12 +192,12 @@ public class RVInstrumentor {
             
             //when a class is loaded by the JVM, the function is invoked
             //每当JVM加载一个class文件时调用
-            public byte[] transform(ClassLoader l, String name, Class<?> c, ProtectionDomain d, byte[] bytes) throws IllegalClassFormatException {
+            public byte[] transform(ClassLoader l, String className, Class<?> c, ProtectionDomain d, byte[] bytes) throws IllegalClassFormatException {
                 try {
 
                     //首先判断类是否需要被插桩
-                    if (shouldInstrumentClass(name)) {
-                        System.err.println("Instrumented (这货需要被插桩🙃️) " + name);
+                    if (shouldInstrumentClass(className)) {
+                        System.err.println("Instrumented (这货需要被插桩🙃️) " + className);
                         
                         ClassReader classReader = new ClassReader(bytes); //bytes is the .class we are going to read
                         ClassWriter classWriter = new ExtendedClassWriter(classReader, ClassWriter.COMPUTE_FRAMES);//ClassWriter.COMPUTE_FRAMES 值为2
@@ -209,7 +209,7 @@ public class RVInstrumentor {
                         bytes = classWriter.toByteArray();
 
                         // - - - - - - - - - -  输出插桩后的class文件 - - - - - - - - - - - - - - - - - - -
-                        File file = new File("./src/test/ClassesGenerated/" + name.replace("/",".") + ".class");
+                        File file = new File("./src/test/ClassesGenerated/" + className.replace("/",".") + ".class");
                         FileOutputStream fOutputStream;
                         try {
                             fOutputStream = new FileOutputStream(file);
@@ -227,7 +227,7 @@ public class RVInstrumentor {
                          */
                         if (debug) 
                         {
-                            System.out.println("Instrumented " + name);
+                            System.out.println("Instrumented " + className);
                         }
                     }
                 } catch (Throwable th) {
