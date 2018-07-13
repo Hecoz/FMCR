@@ -24,30 +24,41 @@ import org.objectweb.asm.ClassWriter;
 
 
 public class RVInstrumentor {
-    
+
+    /**
+     * Constants
+     */
     private static final String SLASH = "/";
     private static final String DOT = ".";
     private static final String SEMICOLON = ";"; //通过 ; 来分割 properties 中的字符串
 
-    public static String bufferClass;
-    public static int fileIndex = 0;
     public static String logClass;    //根据指定的模型检查器选择运行时插桩程序
     private static final String JUC_DOTS = "java.util.concurrent";
 
     private static final String INSTRUMENTATION_PACKAGES_DEFAULT = "default";
     public static final String INSTR_EVENTS_RECEIVER = Scheduler.class.getName().replace(DOT, SLASH);
 
+    /**
+     *  packages and classes which needed to instrument or ignore
+     */
+    //Ignore
+    private static final Set<String> pckgPrefixesToIgnore = new HashSet<String>();
+    private static final Set<String> pckgsToIgnore = new HashSet<String>();
+    private static final Set<String> classPrefixesToIgnore = new HashSet<String>();
+    private static final Set<String> classesToIgnore = new HashSet<String>();
+    //Allow
+    private static final Set<String> pckgPrefixesToAllow = new HashSet<String>();
+    private static final Set<String> pckgsToAllow = new HashSet<String>();
+    private static final Set<String> classPrefixesToAllow = new HashSet<String>();
+    private static final Set<String> classesToAllow = new HashSet<String>();
+
+    /**
+     * store the packages that needs to instrument or ignored
+     */
     public static Set<String> packagesThatWereInstrumented = new HashSet<String>();
     public static Set<String> packagesThatWereNOTInstrumented = new HashSet<String>();
 
-    private static final Set<String> pckgPrefixesToIgnore = new HashSet<String>();  //保存要忽略的包 prefixes
-    private static final Set<String> pckgsToIgnore = new HashSet<String>();         //保存要忽略的包 设置是空
-    private static final Set<String> classPrefixesToIgnore = new HashSet<String>(); //保存要忽略的类 prefixes
-    private static final Set<String> classesToIgnore = new HashSet<String>();       //保存要忽略的类 也是空
-    private static final Set<String> pckgPrefixesToAllow = new HashSet<String>();   //保存允许的包 prefixes
-    private static final Set<String> pckgsToAllow = new HashSet<String>();          //保存语允许的包
-    private static final Set<String> classPrefixesToAllow = new HashSet<String>();  //保存允许的类 prefixes
-    private static final Set<String> classesToAllow = new HashSet<String>();        //保存允许的类
+
 
     //存储属性值
     private static void storePropertyValues(String values, Set<String> toSet) {
@@ -139,26 +150,31 @@ public class RVInstrumentor {
     }
 
     public static void premain(String agentArgs, Instrumentation inst) {
-        
-        //MCRProperties
+
+        /**
+         * 01:设置相关的属性值
+         */
         MCRProperties mcrProps = MCRProperties.getInstance();
-        
-        //01:设置相关的属性值
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_IGNORE_PREFIXES_KEY), pckgPrefixesToIgnore);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_IGNORE_KEY), pckgsToIgnore);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_IGNORE_PREFIXES_KEY), classPrefixesToIgnore);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_IGNORE_KEY), classesToIgnore);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_ALLOW_PREFIXES_KEY), pckgPrefixesToAllow);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_ALLOW_KEY), pckgsToAllow);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_ALLOW_PREFIXES_KEY), classPrefixesToAllow);
-        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_ALLOW_KEY), classesToAllow);
-        
-        //02:设置内存模型，默认是顺序一致性内存模型
+        //IGNORE
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_IGNORE_PREFIXES_KEY),pckgPrefixesToIgnore);
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_IGNORE_KEY),pckgsToIgnore);
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_IGNORE_PREFIXES_KEY),classPrefixesToIgnore);
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_IGNORE_KEY),classesToIgnore);
+        //ALLOW
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_ALLOW_PREFIXES_KEY),pckgPrefixesToAllow);
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_PACKAGES_ALLOW_KEY),pckgsToAllow);
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_ALLOW_PREFIXES_KEY),classPrefixesToAllow);
+        storePropertyValues(mcrProps.getProperty(MCRProperties.INSTRUMENTATION_CLASSES_ALLOW_KEY),classesToAllow);
+
+        /**
+         * 02:设置内存模型，默认是顺序一致性内存模型
+         */
         String memory_model = System.getProperty("memory_model"); //返回为null
         if (memory_model != null && !memory_model.isEmpty()) {
             RVConfig.instance.mode = memory_model;
         }
-        /* 
+
+        /**
          * 03:配置文件 在这里设置，
          */
         final boolean debug = Boolean.parseBoolean(System.getProperty("debug")); //debug :false
@@ -167,7 +183,7 @@ public class RVInstrumentor {
         Configuration.Optimize = static_opt;
         Configuration.setup();
         
-        /*
+        /**
          * 04:根据指定的模型检查器选择运行时插桩程序
          */
         logClass = "controller/Instrumentor/RVRunTime";

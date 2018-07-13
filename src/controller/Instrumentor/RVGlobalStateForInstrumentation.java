@@ -10,182 +10,91 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import controller.profile.ProfileRunTime;
 import org.objectweb.asm.ClassReader;
 
 
 public class RVGlobalStateForInstrumentation {
-	
-    
-    public final static String FILE_SHARED_VARIABLE = "sharedvariables.ser";
-    public final static String FILE_SHARED_ARRAY_LOCATION = "sharedarrayloc.ser";
 
-    public static final String RUNNABLE_CLASS_NAME = "java/lang/Runnable";
-    public static final String OBJECT_CLASS_NAME = "java/lang/Object";
-    public static final String THREAD_CLASS_NAME = "java/lang/Thread";
-    public static final String REENTRANTLOCK_NAME = "java/util/concurrent/locks/ReentrantLock";
+	public static final String RUNNABLE_CLASS_NAME = "java/lang/Runnable";
+	public static final String OBJECT_CLASS_NAME = "java/lang/Object";
+	public static final String THREAD_CLASS_NAME = "java/lang/Thread";
+	public static final String REENTRANTLOCK_NAME = "java/util/concurrent/locks/ReentrantLock";
 
-    
-    public static RVGlobalStateForInstrumentation instance = new RVGlobalStateForInstrumentation();
+
+	public static RVGlobalStateForInstrumentation instance = new RVGlobalStateForInstrumentation();
 	public static HashMap<Integer, String> variableIdSigMap = new HashMap<Integer, String>();
 	public static HashMap<Integer, String> stmtIdSigMap = new HashMap<Integer, String>();
 	public HashSet<String> volatilevariables = new HashSet<String>();
 
-    public ConcurrentHashMap<String,Integer> variableIdMap = new ConcurrentHashMap<String,Integer>();
-    public HashMap<Integer,String> arrayIdMap = new HashMap<Integer,String>();
+	public ConcurrentHashMap<String,Integer> variableIdMap = new ConcurrentHashMap<String,Integer>();
+	public HashMap<Integer,String> arrayIdMap = new HashMap<Integer,String>();
 
-    public HashSet<String> volatileVariables = new HashSet<String>();
-    public ConcurrentHashMap<String,Integer> stmtSigIdMap = new ConcurrentHashMap<String,Integer>();
-    
-    HashSet<String> sharedVariables;
-    HashSet<String> sharedArrayLocations;
-	    
-	    public void saveObjectToFile(Object o, String filename)
-	    {
-	        // save the object to file
-            FileOutputStream fos = null;
-            ObjectOutputStream out = null;
-            try {
-              fos = new FileOutputStream(filename);
-              out = new ObjectOutputStream(fos);
-              out.writeObject(o);
+	public HashSet<String> volatileVariables = new HashSet<String>();
+	public ConcurrentHashMap<String,Integer> stmtSigIdMap = new ConcurrentHashMap<String,Integer>();
 
-              out.close();
-            } catch (Exception ex) {
-              ex.printStackTrace();
-            }
-            
+	public void saveObjectToFile(Object o, String filename)
+	{
+		// save the object to file
+		FileOutputStream fos = null;
+		ObjectOutputStream out = null;
+		try {
+		  fos = new FileOutputStream(filename);
+		  out = new ObjectOutputStream(fos);
+		  out.writeObject(o);
 
-	    }
-	    
-	    /*
-	     * there is some confusion about this function
-	     * it is useless but without calling
-	     * an DefNotfound exception reported by the scheduler class
-	     * 
-	     * it needs to call ObjectInputStream() for load the class ??
-	     */
-	    public boolean initSharedData()
-	    {
-	        FileInputStream fis = null;
-            ObjectInputStream in = null;
-	        try {	              
-	              in = new ObjectInputStream(fis);
-	              in.close();
-	            } catch (Exception ex) {
-	              ex.printStackTrace();
-	            }
-            return true;
-	    }
-	 
-	    public void setSharedArrayLocations(HashSet<String> locs)
-	    {
-	        this.sharedArrayLocations = locs;
-	    }
-	    
-	    public void setSharedVariables(HashSet<String> locs)
-	    {
-	        this.sharedVariables = locs;
-	    }
-
-	    public void saveMetaData() {
-
-	        {
-	            //show arrayId
-	            HashSet<Integer> sharedArrayIds = new HashSet<Integer>();
-	            for(Integer sid: ProfileRunTime.sharedArrayIds)
-	            {
-	                HashSet<Integer> ids = ProfileRunTime.arrayIdsMap.get(sid);
-	                    sharedArrayIds.addAll(ids);
-	            }
-
-	            sharedVariables = new HashSet<String>();
-	                //show variableId
-	                for(Map.Entry<String,Integer> entry: variableIdMap.entrySet())
-	                {
-	                    Integer id = entry.getValue();
-	                    String var = entry.getKey();
-	                    if(ProfileRunTime.sharedVariableIds.contains(id))
-	                        sharedVariables.add(var);
-
-	                }
-
-	                sharedArrayLocations = new HashSet<String>();
-
-	                for(Integer id: arrayIdMap.keySet())
-	                {
-	                    String var = arrayIdMap.get(id);
-	                    if(sharedArrayIds.contains(id))
-	                        sharedArrayLocations.add(var);
-	                }
+		  out.close();
+		} catch (Exception ex) {
+		  ex.printStackTrace();
+		}
 
 
+	}
 
-	            if(RVConfig.instance.verbose)
-	            {
-	                int size_var = variableIdMap.entrySet().size();
-	                int size_array = arrayIdMap.entrySet().size();
+	public void addVolatileVariable(String sig)
+	{
+		if (!volatileVariables.contains(sig)) {
+			synchronized (volatileVariables) {
+				if (!volatileVariables.contains(sig)) {
+					volatileVariables.add(sig);
+					//unsavedVolatileVariables.put(sig, true);
+				}
+			}
+		}
+	}
 
-	                double svar_percent = size_var==0?0:((double)ProfileRunTime.sharedVariableIds.size()/variableIdMap.entrySet().size());
-	                double sarray_percent = size_array==0?0:((double)sharedArrayIds.size()/arrayIdMap.entrySet().size());
+	public int getLocationId(String sig)
+	{
+		if(stmtSigIdMap.get(sig)==null)
+	  {
+		  synchronized (stmtSigIdMap) {
+			  if(stmtSigIdMap.get(sig)==null) {
+				  int size = stmtSigIdMap.size() + 1;
+				  stmtSigIdMap.put(sig, size);
+				  stmtIdSigMap.put(size,sig);
+			  }
+		  }
+	  }
 
-	                System.out.println("\nSHARED VARIABLE PERCENTAGE: "+svar_percent);
-	                System.out.println("SHARED ARRAY PERCENTAGE: "+sarray_percent);
-	            }
-	            //save the sharedvariable to file??
-	            // sharedVariables,sharedArrayLocations
-	            
-	            saveObjectToFile(sharedVariables,FILE_SHARED_VARIABLE);
-	            saveObjectToFile(sharedArrayLocations,FILE_SHARED_ARRAY_LOCATION);
+	  return stmtSigIdMap.get(sig);
+	}
+	public int getArrayLocationId(String sig)
+	{
+		int id = getLocationId(sig);
 
-	        }
-	    }
+		arrayIdMap.put(id,sig);
 
-	    public void addVolatileVariable(String sig)
-	    {
-	        if (!volatileVariables.contains(sig)) {
-	            synchronized (volatileVariables) {
-	                if (!volatileVariables.contains(sig)) {
-	                    volatileVariables.add(sig);
-	                    //unsavedVolatileVariables.put(sig, true);
-	                }
-	            }
-	        }
-	    }
-	    
-	    public int getLocationId(String sig)
-	    {
-	        if(stmtSigIdMap.get(sig)==null)
-	      {
-	          synchronized (stmtSigIdMap) {
-	              if(stmtSigIdMap.get(sig)==null) {
-	                  int size = stmtSigIdMap.size() + 1;
-	                  stmtSigIdMap.put(sig, size);
-	                  stmtIdSigMap.put(size,sig);
-	              }
-	          }
-	      }
-	        
-	      return stmtSigIdMap.get(sig);
-	    }
-	    public int getArrayLocationId(String sig)
-	    {
-	        int id = getLocationId(sig);
-	        
-	        arrayIdMap.put(id,sig);
-	        
-	        return id;
-	    }
-	    public String getArrayLocationSig(int id)
-	    {
-	        return arrayIdMap.get(id);
-	    }
+		return id;
+	}
+	public String getArrayLocationSig(int id)
+	{
+		return arrayIdMap.get(id);
+	}
 
-	   /**
-	    * This call returns the ID of a variable from a map structure
-	    * @param sig
-	    * @return
-	    */
+   /**
+	* This call returns the ID of a variable from a map structure
+	* @param sig
+	* @return
+	*/
 	public int getVariableId(String sig) {
 		if(variableIdMap.get(sig)==null) {
 	          synchronized (variableIdMap) {

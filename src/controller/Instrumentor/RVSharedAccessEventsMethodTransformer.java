@@ -50,7 +50,6 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
             
 	        super(Opcodes.ASM5, mv, access, mname, desc);
 
-
             this.source = source == null ? "Unknown" : source;
             this.className = cname;
             this.methodName = mname;
@@ -85,18 +84,7 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
             if(RVGlobalStateForInstrumentation.instance.isThreadClass(owner))
             {
                 if(name.equals("start") && desc.equals("()V")) {
-                    
-                    /*
-                     * when a sync happens, we should do memBar operations
-                     * 
-                     */
-                    if(RVConfig.instance.mode == "TSO" || RVConfig.instance.mode == "PSO"){
-                        mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass, 
-                                RVConfig.instance.MEM_BARRIER, 
-                                RVConfig.instance.DESC_MEM_BARRIER);
-                    }
-                    /* end */
-                    
+
                     maxindex_cur++;
                     int index = maxindex_cur;
                     mv.visitInsn(DUP);
@@ -343,18 +331,6 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 		    if (!isInit){
 		        this.informSchedulerAboutFieldAccess(true, isRead, owner, name, desc);
 		    }
-		    
-		    /*
-		     * Before execute the read operation, it needs to empty the buffer first
-		     * otherwise a read might happen before a write to the same addr
-		     * e.g. w(x) w(y) r(z) r(y)
-		     */
-		    
-		    if(RVConfig.instance.mode == "TSO" || RVConfig.instance.mode == "PSO"){
-		        mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass, 
-                        RVConfig.instance.MEM_BARRIER, 
-                        RVConfig.instance.DESC_MEM_BARRIER);
-		    }
 		    	    
 		    mv.visitFieldInsn(opcode, owner, name, desc);
 			if (!isInit) {
@@ -402,47 +378,8 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
 			storeValue(desc, index);
 			//mv.visitVarInsn(ISTORE, index);
             this.informSchedulerAboutFieldAccess(true, isRead, owner, name, desc); //call beforeFieldAccess
-			  
-            if(isInit){
-                putStatic(desc, owner, name, opcode, ID, SID, index);
-            }
-            else{
-                if(RVConfig.instance.mode== "TSO" || RVConfig.instance.mode== "PSO"){
-                   
-                    /*
-                     * it is important to pop the value in the stack
-                     * when return it requires stakc{  }
-                     */
-                    
-                    //this is error prone
-                    //mv.visitVarInsn(ISTORE, index);  //pop value to #index
-                    popValue(desc, index);
-                    
-                    String info =  owner + ":" + name + ":" + ID + ":" + SID;
-                    //the parameter
-                    loadValue(desc, index);  //the value
-                    mv.visitLdcInsn(info);
-                    /*
-                     * instrument the buffer operation 
-                     * this callback function will return a boolean
-                     * to decide whether or not it needs to be buffered
-                     */
-                    if (RVConfig.instance.mode=="TSO"){
-                        mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass, 
-                                RVConfig.instance.BUFFER_STORE, 
-                                RVConfig.instance.DESC_BUFFER_STORE);
-                    }
-                    else{
-                        mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass, 
-                                RVConfig.instance.BUFFER_STORE_PSO, 
-                                RVConfig.instance.DESC_BUFFER_STORE_PSO);
-                    }           
-                }
-                else{
-                    putStatic(desc, owner, name, opcode, ID, SID, index);
-                }
-            }
-           
+
+            putStatic(desc, owner, name, opcode, ID, SID, index);
 			break;
 
 		case GETFIELD:
@@ -1034,23 +971,13 @@ public class RVSharedAccessEventsMethodTransformer extends AdviceAdapter impleme
                             RVConfig.instance.DESC_LOG_LOCK_INSTANCE);
                     break;
                 case MONITOREXIT:
-                    
-                    /*
-                     * membar
-                     */
-                   if(RVConfig.instance.mode == "TSO" || RVConfig.instance.mode == "PSO"){
-                        mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass, 
-                                RVConfig.instance.MEM_BARRIER, 
-                                RVConfig.instance.DESC_MEM_BARRIER);
-                    }
-                    
+
                     //mv.visitInsn(DUP);
                     maxindex_cur++;
                     index = maxindex_cur;
                     mv.visitVarInsn(ASTORE, index);// objectref
                     addBipushInsn(mv, ID);
                     mv.visitVarInsn(ALOAD, index);
-
 
                     mv.visitMethodInsn(INVOKESTATIC, RVInstrumentor.logClass,
                             RVConfig.instance.LOG_UNLOCK_INSTANCE,

@@ -27,12 +27,6 @@ import controller.scheduling.filtering.DefaultFilter;
 import controller.scheduling.filtering.SchedulingFilter;
 import controller.scheduling.strategy.SchedulingStrategy;
 import sun.misc.Unsafe;
-import edu.illinois.imunit.internal.parsing.BlockEvent;
-import edu.illinois.imunit.internal.parsing.Event;
-import edu.illinois.imunit.internal.parsing.Name;
-import edu.illinois.imunit.internal.parsing.Ordering;
-import edu.illinois.imunit.internal.parsing.Orderings;
-import edu.illinois.imunit.internal.parsing.SimpleEvent;
 
 /**
  * Class that orchestrates threads so that they can be scheduled using custom
@@ -61,8 +55,7 @@ public class Scheduler {
     private static final String AT = "@";
     private static final String CLEARED_SCHEDULE = "";
     private static String currentSchedule = CLEARED_SCHEDULE;
-    
-    private static final Map<String, Set<Event>> currentOrderings = new HashMap<String, Set<Event>>();
+
     private static final Map<String, Thread> currentHappenedEvents = new HashMap<String, Thread>();
 
     private final static Reex_Semaphore deadlockOrFinishNotifier = new Reex_Semaphore(0);
@@ -84,10 +77,19 @@ public class Scheduler {
      * Initialize state before everything.
      */
     static {
+
+        /**
+         * 01 init liveThreadInfos
+         *         pausedThreadInfos
+         *         blockedThreadInfos
+         *         currentHappenedEvents
+         */
         initState();
 
-        // Catch any uncaught exception thrown by any thread
-        // NOTE: this can be overridden by the code under test
+        /**
+         * 02 Catch any uncaught exception thrown by any thread
+         *    NOTE: this can be overridden by the code under test
+         */
         Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionHandler() {
 
             /*
@@ -125,8 +127,10 @@ public class Scheduler {
             }
         });
 
+        /**
+         * 03 Set the scheduling strategy to be used
+         */
         MCRProperties mcrProps = MCRProperties.getInstance();
-        /* Set the scheduling strategy to be used */
         String schedulingStrategyClassName = "controller.scheduling.strategy.MCRStrategy";
         if (schedulingStrategyClassName != null) {
             try {
@@ -137,13 +141,7 @@ public class Scheduler {
                 e.printStackTrace();
                 System.exit(2);
             }
-        } 
-//        else {
-//            System.out.println("\nWARNING: no value specified for property \"" + MCRProperties.SCHEDULING_STRATEGY_KEY + "\"");
-//            System.out.println("WARNING: using \"" + DefaultStrategy.class.getName() + "\", which will choose only one possible schedule");
-//            System.out.println("NOTE: See the \"edu.tamu.aser.scheduling.strategy\" package for a list of provided strategies\n");
-//            schedulingStrategy = new DefaultStrategy();
-//        }
+        }
 
         /* Set the scheduling filter to be used */
         String schedulingFilterClassName = mcrProps.getProperty(MCRProperties.SCHEDULING_FILTER_KEY);
@@ -883,7 +881,7 @@ public class Scheduler {
     /**
      * Executed instead of {@link Object#notify()} invocations.
      * 
-     * @param waitObject
+     * @param notifyObject
      *            the {@link Object} on which {@link #notify()} is being
      *            performed.
      */
@@ -907,7 +905,7 @@ public class Scheduler {
     /**
      * Executed instead of {@link Object#notifyAll()} invocations.
      * 
-     * @param waitObject
+     * @param notifyAllObject
      *            the {@link Object} on which {@link #notifyAll()} is being
      *            performed.
      */
@@ -988,7 +986,7 @@ public class Scheduler {
      * Executed instead of {@link Thread#join()}.
      * 
      * @param joinThread
-     *            the {@link Thread} on which {@link #join())} is being
+     *            the {@link Thread} on which  is being
      *            performed.
      * @throws InterruptedException
      */
@@ -1033,7 +1031,7 @@ public class Scheduler {
      * Executed instead of a timed {@link Thread#join()}.
      * 
      * @param joinThread
-     *            the {@link Thread} on which {@link #join())} is being
+     *            the {@link Thread} on which  is being
      *            performed.
      * @throws InterruptedException
      */
@@ -1051,7 +1049,7 @@ public class Scheduler {
      * Executed instead of a timed {@link Thread#join()}.
      * 
      * @param joinThread
-     *            the {@link Thread} on which {@link #join())} is being
+     *            the {@link Thread} on which  is being
      *            performed.
      * @throws InterruptedException
      */
@@ -1275,74 +1273,6 @@ public class Scheduler {
         schedulerStateLock.unlock();
     }
 
-    /**
-     * Method used to replace fireEvent in IMUnit, to put constraints for exploration
-     * 
-     * @param event
-     *            IMUnit event name
-     */
-    public static void fireIMUnitEvent(String eventName) {
-        // If event does not need to wait for other events:
-        // 2) Add to happened events
-        // 1) Find any events waiting for this event and enable them
-        // If event needs to wait for other events:
-        // 1) Check if other events have happened, if so just add this to
-        // happened events
-        // 2) If other events have not happened, add this thread to blocked
-        // threads
-        if (!currentOrderings.isEmpty()) {
-            /* Collect the event(s) this event needs to wait for */
-            Set<Event> beforeEvents = new HashSet<Event>();
-            if (currentOrderings.containsKey(eventName)) {
-                beforeEvents.addAll(currentOrderings.get(eventName));
-            }
-            Thread currentThread = Thread.currentThread();
-            String qualifiedName = eventName + AT + currentThread.getName();
-            if (currentOrderings.containsKey(qualifiedName)) {
-                beforeEvents.addAll(currentOrderings.get(qualifiedName));
-            }
-
-            /* Wait for collected events to be completed */
-            if (!beforeEvents.isEmpty()) {
-                for (Event beforeEvent : beforeEvents) {
-                    if (beforeEvent instanceof SimpleEvent) {
-                        SimpleEvent simpleEvent = (SimpleEvent) beforeEvent;
-                        String simpleEventDesc = getEventDesc(simpleEvent);
-                        blockForIMUnitEvent(simpleEventDesc);
-                    } else if (beforeEvent instanceof BlockEvent) {
-                        BlockEvent blockEvent = (BlockEvent) beforeEvent;
-                        String blockEventDesc = getEventDesc(blockEvent);
-                        blockForIMUnitEvent(blockEventDesc);
-                        blockForThreadBlock(currentThread, blockEventDesc);
-                    }
-                }
-            }
-            schedulerStateLock.lock();
-            try {
-                /* This event has now happened */
-                currentHappenedEvents.put(eventName, currentThread);
-                currentHappenedEvents.put(qualifiedName, currentThread);
-                Set<ThreadInfo> unblock = new HashSet<ThreadInfo>();
-                for (ThreadInfo blockedThreadInfo : blockedThreadInfos) {
-                    EventDesc eventDesc = blockedThreadInfo.getEventDesc();
-                    if (eventDesc.getEventType().equals(EventType.BLOCKED_FOR_IMUNIT_EVENT)) {
-                        String blockingForEvent = ((BlockedForIMUnitEventDesc) eventDesc).getEvent();
-                        if (blockingForEvent.equals(eventName) || blockingForEvent.equals(qualifiedName)) {
-                            unblock.add(blockedThreadInfo);
-                        }
-                    }
-                }
-                blockedThreadInfos.removeAll(unblock);
-                for (ThreadInfo unblockThreadInfo : unblock) {
-                    unblockThreadInfo.getPausingSemaphore().release();
-                }
-            } finally {
-                schedulerStateLock.unlock();
-            }
-        }
-    }
-
-
     private static void unblockThreadsBlockingForThreadBlock() {
         Set<ThreadInfo> unblock = new HashSet<ThreadInfo>();
         for (ThreadInfo blockedThreadInfo : blockedThreadInfos) {
@@ -1416,58 +1346,6 @@ public class Scheduler {
             e.printStackTrace();
             System.exit(2);
         }
-    }
-
-    public static void setIMUnitSchedule(String name, Orderings orderings) {
-        currentSchedule = name;
-        currentOrderings.clear();
-        for (Ordering partialOrder : orderings.getOrderings()) {
-            SimpleEvent afterEvent = partialOrder.getAfterEvent();
-            String afterEventDesc = getEventDesc(afterEvent);
-            Set<Event> beforeEvents = currentOrderings.get(afterEventDesc);
-            if (beforeEvents == null) {
-                beforeEvents = new HashSet<Event>();
-                currentOrderings.put(afterEventDesc, beforeEvents);
-            }
-            beforeEvents.add(partialOrder.getBeforeEvent());
-        }
-        currentHappenedEvents.clear();
-    }
-
-    public static void clearIMUnitSchedule() {
-        currentSchedule = CLEARED_SCHEDULE;
-        currentOrderings.clear();
-        currentHappenedEvents.clear();
-    }
-
-    /**
-     * Helper method for constructing the description of a {@link SimpleEvent}.
-     * 
-     * @param simpleEvent
-     * @return description of simpleEvent
-     */
-    private static String getEventDesc(SimpleEvent simpleEvent) {
-        String eventDesc = simpleEvent.getEventName().getName();
-        Name eventThreadName = simpleEvent.getThreadName();
-        if (eventThreadName.getName() != null) {
-            eventDesc += AT + eventThreadName.getName();
-        }
-        return eventDesc;
-    }
-
-    /**
-     * Helper method for constructing the description of a {@link BlockEvent}.
-     * 
-     * @param blockEvent
-     * @return description of blockEvent
-     */
-    private static String getEventDesc(BlockEvent blockEvent) {
-        String eventDesc = blockEvent.getBlockAfterEventName().getName();
-        Name eventThreadName = blockEvent.getThreadName();
-        if (eventThreadName.getName() != null) {
-            eventDesc += AT + eventThreadName.getName();
-        }
-        return eventDesc;
     }
 
 }

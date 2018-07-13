@@ -16,20 +16,15 @@ import org.junit.runners.BlockJUnit4ClassRunner;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.InitializationError;
 
-import edu.illinois.imunit.Schedule;
-import edu.illinois.imunit.ScheduleError;
-import edu.illinois.imunit.Schedules;
-import edu.illinois.imunit.internal.parsing.Orderings;
-import edu.illinois.imunit.internal.parsing.ParseException;
-import edu.illinois.imunit.internal.parsing.ScheduleParser;
-import edu.illinois.imunit.internal.parsing.TokenMgrError;
-
 /**
  * MCR runner for JUnit4 tests.
  * 
  */
 public class JUnit4MCRRunner extends BlockJUnit4ClassRunner {
 
+    /**
+     * Constants
+     */
     private static final String DOT = ".";
 
     private static final String INVALID_SYNTAX_MESSAGE = "Ignoring schedule because of invalid syntax: name = %s value = %s .\nCaused by: %s";
@@ -45,15 +40,21 @@ public class JUnit4MCRRunner extends BlockJUnit4ClassRunner {
     
     private boolean isDeadlockExpected = false;
     public static HashSet<String> npes = new HashSet<String>();
-    
+
+    private static JUnit4WrappedRunNotifier wrappedNotifier;
+    private static FrameworkMethod method;
+
+    /**
+     * programe terminated when the first error detected
+     */
+    private static boolean stopOnFirstError;
+
+
+
     public JUnit4MCRRunner(Class<?> klass) throws InitializationError {
         super(klass);
     }
 
-    private static JUnit4WrappedRunNotifier wrappedNotifier;
-    private static FrameworkMethod method;
-    private static boolean stopOnFirstError;
-    
     //start from here
     //the first to be executed in this class
     //and after instrumentation
@@ -66,20 +67,8 @@ public class JUnit4MCRRunner extends BlockJUnit4ClassRunner {
         
         Trace.appname = method.getMethod().getDeclaringClass().getName(); //当前类的绝对路径
 
-        Map<String, Orderings> schedules = collectSchedules();
-        //System.out.println("schedules🙂️🙂🙂:" + schedules);
-        if (!schedules.isEmpty()) {
+        exploreTest(method, notifier);
 
-            for (Entry<String, Orderings> schedule : schedules.entrySet()) {
-                Scheduler.setIMUnitSchedule(schedule.getKey(), schedule.getValue());
-                exploreTest(method, notifier);                
-            }
-            Scheduler.clearIMUnitSchedule();
-        }
-        else
-        {
-            exploreTest(method, notifier);
-        }
     }
     
     /**
@@ -199,46 +188,6 @@ public class JUnit4MCRRunner extends BlockJUnit4ClassRunner {
     }
 
 
-    /**
-     * Helper method for collecting all the names and partial orders for the given test method.
-     */
-    private Map<String, Orderings> collectSchedules() {
-        
-        Map<String, Orderings> schedules = new HashMap<String, Orderings>();
-        Schedules schsAnno = this.currentTestMethod.getAnnotation(Schedules.class);
-        isDeadlockExpected = (this.currentTestMethod.getAnnotation(ExpectedDeadlock.class) != null);
-        
-        if (schsAnno != null) {
-            for (Schedule schAnno : schsAnno.value()) {
-                collectSchedule(schAnno, schedules);
-            }
-        }
-        //why write it twice here??
-        //because there are Schedule and Schedules,it doesn't matter,this do not use the function
-//        Schedule schAnno = currentTestMethod.getAnnotation(Schedule.class);
-//        if (schAnno != null) {
-//            collectSchedule(schAnno, schedules);
-//        }
-        return schedules;
-    }
 
-    /**
-     * Helper method for collecting the name and partial orders from each {@link Schedule} annotation.
-     *
-     * @param schAnno
-     * @param schedules
-     *
-     */
-    private void collectSchedule(Schedule schAnno, Map<String, Orderings> schedules) {
-        String schName = schAnno.name();
-        schName = schName != null && schName.length() > 0 ? schName : schAnno.value();
-        try {
-            schedules.put(schName, new ScheduleParser(new StringReader(schAnno.value())).Orderings());
-        } catch (ParseException e) {
-            this.currentTestNotifier.fireTestFailure(new Failure(describeChild(this.currentTestMethod), new ScheduleError(schName, String.format(INVALID_SYNTAX_MESSAGE, schName, schAnno.value(), e))));
-        } catch (TokenMgrError e) {
-            this.currentTestNotifier.fireTestFailure(new Failure(describeChild(this.currentTestMethod), new ScheduleError(schName, String.format(INVALID_SYNTAX_MESSAGE, schName, schAnno.value(), e))));
-        }
-    }
 
 }
