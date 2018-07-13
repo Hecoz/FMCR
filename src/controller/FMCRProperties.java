@@ -25,7 +25,8 @@ public class FMCRProperties extends Properties {
     /**
      *  Scheduling related properties
      */
-
+    public static final String STOP_ON_FIRST_ERROR_KEY = "mcr.exploration.stoponfirsterror";
+    public static final String SCHEDULING_FILTER_KEY = "mcr.exploration.schedulingfilter";
 
     /**
      *  properties related property
