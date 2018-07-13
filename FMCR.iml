@@ -8,8 +8,8 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="junit" level="project" />
-    <orderEntry type="library" name="imunit-1.5" level="project" />
     <orderEntry type="library" name="magent" level="project" />
     <orderEntry type="library" name="asm" level="project" />
+    <orderEntry type="library" name="imunit-1.51" level="project" />
   </component>
 </module>

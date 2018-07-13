@@ -30,7 +30,7 @@ public abstract class SchedulingStrategy {
     /**
      * This method is called to decide whether more schedules should be
      * explored.
-     *
+     * 
      * @return <code>true</code> if more schedules exist, <code>false</code>
      *         otherwise.
      */
@@ -40,7 +40,7 @@ public abstract class SchedulingStrategy {
      * This is the core of the {@link SchedulingStrategy}. This method is called
      * to choose one of the given {@link Object}s. The type of choice is
      * specified by the {@link ChoiceType}.
-     *
+     * 
      * @param objectChoices
      *            {@link SortedSet} of the {@link Object}s to choose from.
      * @param choiceType
@@ -52,7 +52,7 @@ public abstract class SchedulingStrategy {
     /**
      * Returns the choices made until now during the execution of the current
      * schedule. This is useful for capturing and reproducing certain schedules.
-     *
+     * 
      * @return {@link List} of choices made until now during the execution of
      *         this schedule.
      */
@@ -61,14 +61,14 @@ public abstract class SchedulingStrategy {
     /**
      * Helper method for retrieving the chosen object from the sorted set of
      * object choices given the chosen index
-     *
+     * 
      * @param chosenIndex
      * @param objectChoices
      * @return retrieves the chosen object from the sorted set of choices given
      *         the chosen index
      */
     protected Object getChosenObject(int chosenIndex, SortedSet<? extends Object> objectChoices) {
-
+        
         for (Iterator<? extends Object> iterator = objectChoices.iterator(); iterator.hasNext();) {
             Object choice = iterator.next();
             if (chosenIndex == 0) {

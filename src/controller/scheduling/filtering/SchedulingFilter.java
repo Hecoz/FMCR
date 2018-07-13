@@ -1,8 +1,8 @@
 package controller.scheduling.filtering;
 
-import java.util.SortedSet;
-
 import controller.scheduling.ChoiceType;
+
+import java.util.SortedSet;
 
 /**
  * Interface that can be implemented to specify a scheduling filter that

@@ -1,30 +1,33 @@
 package controller.Instrumentor;
 
+import java.io.IOException;
+import java.io.InputStream;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
-import java.io.IOException;
-import java.io.InputStream;
+import com.sun.istack.internal.logging.Logger;
+
+import sun.util.logging.resources.logging;
 
 public class ExtendedClassWriter extends ClassWriter {
 
-    public ExtendedClassWriter(ClassReader classReader, int i) {
-        super(classReader, i);
+    public ExtendedClassWriter(ClassReader classReader, int flags) {
+        super(classReader, flags);
     }
 
-
+    
     @Override
     protected String getCommonSuperClass(String type1, String type2) {
-
+        
         ClassLoader classLoader = getClass().getClassLoader();
-
-        if (classLoader == null){
-
+        
+        if (classLoader == null) {
             classLoader = ClassLoader.getSystemClassLoader();
         }
+        
         ClassInfo c, d;
         try {
             c = new ClassInfo(type1, classLoader);
@@ -32,16 +35,16 @@ public class ExtendedClassWriter extends ClassWriter {
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
-
+        
         //isAssignableFrom 判定此class对象所表示的类或接口与指定的class参数所表示的类或接口是否相同
         if (c.isAssignableFrom(d)) {
             return type1;
         }
-
+        
         if (d.isAssignableFrom(c)) {
             return type2;
         }
-
+        
         if (c.isInterface() || d.isInterface()) {
             return "java/lang/Object";
         } else {
@@ -51,31 +54,33 @@ public class ExtendedClassWriter extends ClassWriter {
             return c.getType().getInternalName();
         }
     }
+
 }
 
-/**
- *  类属性
- */
-class ClassInfo{
+class ClassInfo {
 
-    private Type type;                  //类型
-    private ClassLoader classLoader;
-    public int access;                         //权限 ACC_PUBLIC+ACC_ABSTRACT+ACC_INTERFACE
-    public String superClass;                  //父类
-    public String[] interfaces;                //所实现的接口
+    private Type type; //类型  
+    
+    private ClassLoader loader;
 
-    public ClassInfo(final String type, final ClassLoader classLoader) {
+    int access; //访问权限   ACC_PUBLIC+ACC_ABSTRACT+ACC_INTERFACE
 
+    String superClass; //父类
+
+    String[] interfaces; //所实现的接口
+
+    public ClassInfo(final String type, final ClassLoader loader) { 
+        
+        this.loader = loader;
         this.type = Type.getObjectType(type);
-        this.classLoader = classLoader;
-
+        
         String s = type.replace('.', '/') + ".class";
-
+        
         InputStream is = null;
         ClassReader cr;
-
+        
         try {
-            is = classLoader.getResourceAsStream(s);
+            is = loader.getResourceAsStream(s);
             cr = new ClassReader(is);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -89,6 +94,7 @@ class ClassInfo{
         }
 
         // optimized version
+        //优化版本
         int h = cr.header;
         ClassInfo.this.access = cr.readUnsignedShort(h);
         char[] buf = new char[2048];
@@ -104,38 +110,37 @@ class ClassInfo{
         }
     }
 
-    public String getName(){
-
+    String getName() {
         return type.getInternalName();
     }
 
-    public Type getType() {
+    Type getType() {
         return type;
     }
 
-    public int getModifiers() {
+    int getModifiers() {
         return access;
     }
 
-    public ClassInfo getSuperclass() {
+    ClassInfo getSuperclass() {
         if (superClass == null) {
             return null;
         }
-        return new ClassInfo(superClass, classLoader);
+        return new ClassInfo(superClass, loader);
     }
 
-    public ClassInfo[] getInterfaces() {
+    ClassInfo[] getInterfaces() {
         if (interfaces == null) {
             return new ClassInfo[0];
         }
         ClassInfo[] result = new ClassInfo[interfaces.length];
         for (int i = 0; i < result.length; ++i) {
-            result[i] = new ClassInfo(interfaces[i], classLoader);
+            result[i] = new ClassInfo(interfaces[i], loader);
         }
         return result;
     }
 
-    public boolean isInterface() {
+    boolean isInterface() {
         return (getModifiers() & Opcodes.ACC_INTERFACE) > 0;
     }
 

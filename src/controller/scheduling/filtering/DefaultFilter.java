@@ -1,8 +1,8 @@
 package controller.scheduling.filtering;
 
-import java.util.SortedSet;
-
 import controller.scheduling.ChoiceType;
+
+import java.util.SortedSet;
 
 /**
  * Default {@link SchedulingFilter} that does not perform any filtering.

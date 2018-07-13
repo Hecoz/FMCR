@@ -74,7 +74,6 @@ public class ThreadInfo implements Comparable<ThreadInfo> {
         return lockCount;
     }
 
-
     public EventDesc getEventDesc() {
         return eventDesc;
     }
@@ -138,4 +137,5 @@ public class ThreadInfo implements Comparable<ThreadInfo> {
     public String toString() {
         return "ThreadInfo {thread=" + thread + ", eventDesc=" + eventDesc + ", locationDesc=" + locationDesc + "}\n";
     }
+
 }

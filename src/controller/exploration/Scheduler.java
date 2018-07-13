@@ -1,14 +1,25 @@
 package controller.exploration;
 
-import java.util.*;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
-import controller.FMCRProperties;
 import controller.Instrumentor.RVRunTime;
+import controller.MCRProperties;
 import controller.internaljuc.Reex_Semaphore;
 import controller.internaljuc.Reex_TimeUnit;
 import controller.internaljuc.locks.MyUnsafe;
 import controller.internaljuc.locks.Reex_Condition;
 import controller.internaljuc.locks.Reex_ReentrantLock;
+import controller.listeners.Listeners;
 import controller.scheduling.ChoiceType;
 import controller.scheduling.ThreadInfo;
 import controller.scheduling.events.*;
@@ -16,67 +27,68 @@ import controller.scheduling.filtering.DefaultFilter;
 import controller.scheduling.filtering.SchedulingFilter;
 import controller.scheduling.strategy.SchedulingStrategy;
 import sun.misc.Unsafe;
+import edu.illinois.imunit.internal.parsing.BlockEvent;
+import edu.illinois.imunit.internal.parsing.Event;
+import edu.illinois.imunit.internal.parsing.Name;
+import edu.illinois.imunit.internal.parsing.Ordering;
+import edu.illinois.imunit.internal.parsing.Orderings;
+import edu.illinois.imunit.internal.parsing.SimpleEvent;
 
-
+/**
+ * Class that orchestrates threads so that they can be scheduled using custom
+ * 协调线程类，让可以自定义调度运行
+ * {@link SchedulingStrategy}s. The instrumentation hooks all call into this
+ * class.
+ * instrumentation 将所有调用都与此类挂钩
+ */
 public class Scheduler {
 
-
-    /**
-     * Constants
-     */
     private static final String BANG = "!";
     private static final String UNABLE_TO_OBTAIN_INSTANCE_OF = "Unable to obtain instance of: ";
 
     /******************************************************************
-     ******************************************************************
+     ****************************************************************** 
      *********************** SCHEDULER STATE **************************
-     ******************************************************************
+     ****************************************************************** 
      ******************************************************************/
 
     private static Map<Thread, ThreadInfo> liveThreadInfos;
     private static SortedSet<ThreadInfo> pausedThreadInfos;
     private static Set<ThreadInfo> blockedThreadInfos;
-
-    private static final Map<String, Thread> currentHappenedEvents = new HashMap<String, Thread>();
-
+    
     private static final Reex_ReentrantLock schedulerStateLock = new Reex_ReentrantLock();
     private static final Reex_Condition schedulerWakeupCondition = schedulerStateLock.newCondition();
+    private static final String AT = "@";
+    private static final String CLEARED_SCHEDULE = "";
+    private static String currentSchedule = CLEARED_SCHEDULE;
+    
+    private static final Map<String, Set<Event>> currentOrderings = new HashMap<String, Set<Event>>();
+    private static final Map<String, Thread> currentHappenedEvents = new HashMap<String, Thread>();
+
+    private final static Reex_Semaphore deadlockOrFinishNotifier = new Reex_Semaphore(0);
 
     /**
      * {@link SchedulingStrategy} to be used for scheduling decisions.
      */
     private static SchedulingStrategy schedulingStrategy;
+
     /**
      * {@link SchedulingFilter} to be used for scheduling decisions.
      */
     private static SchedulingFilter schedulingFilter;
-
     private static boolean exploring = false;
 
     private static final Unsafe unsafe = MyUnsafe.getUnsafe();
 
-    private final static Reex_Semaphore deadlockOrFinishNotifier = new Reex_Semaphore(0);
-
-
     /**
      * Initialize state before everything.
      */
-    static{
-
-        /**
-         * 01 init liveThreadInfos
-         *         pausedThreadInfos
-         *         blockedThreadInfos
-         *         currentHappenedEvents
-         */
+    static {
         initState();
 
-
-        /**
-         * 02 Catch any uncaught exception thrown by any thread
-         *    NOTE: this can be overridden by the code under test
-         */
-        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+        // Catch any uncaught exception thrown by any thread
+        // NOTE: this can be overridden by the code under test
+        Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionHandler() {
 
             /*
              * This method will execute in the context of the thread that raised
@@ -85,38 +97,37 @@ public class Scheduler {
             @Override
             public void uncaughtException(Thread t, Throwable e) {
                 if (e != null) {
+//                    System.err.println("error");
                     e.printStackTrace();
                 }
-                if(e instanceof NullPointerException){
-
+                if(e instanceof NullPointerException)//TODO: JEFF
+                {
                     String message = "";
-                    for( StackTraceElement traceElement : e.getStackTrace())
-                        message +=traceElement.toString()+"\n";
-
-                    if(message.isEmpty()) {
+                       for( StackTraceElement traceElement : e.getStackTrace())
+                            message +=traceElement.toString()+"\n";
+                    
+                       if(message.isEmpty())
+                    {
                         System.out.println("DEBUG");
                     }
-
+                    
                     JUnit4MCRRunner.npes.add(message);
                     failureDetected(null);
-                    //Listeners.fireCompletedExploration();
+                    Listeners.fireCompletedExploration();
                     Scheduler.endThread();
                 }
                 else
                 {
                     failureDetected(null);
-                    //Listeners.fireCompletedExploration();
+                    Listeners.fireCompletedExploration();
                     System.exit(2);
                 }
             }
         });
 
-        /**
-         * 03 Set the scheduling strategy to be used
-         */
-        FMCRProperties mcrProps = FMCRProperties.getFmcrProperties();
-        /** Set the scheduling strategy to be used */
-        String schedulingStrategyClassName = "controller.scheduling.strategy.FMCRStrategy";
+        MCRProperties mcrProps = MCRProperties.getInstance();
+        /* Set the scheduling strategy to be used */
+        String schedulingStrategyClassName = "controller.scheduling.strategy.MCRStrategy";
         if (schedulingStrategyClassName != null) {
             try {
                 schedulingStrategy = (SchedulingStrategy) Class.forName(schedulingStrategyClassName).newInstance();
@@ -126,10 +137,17 @@ public class Scheduler {
                 e.printStackTrace();
                 System.exit(2);
             }
-        }
-        /** Set the scheduling filter to be used */
-        String schedulingFilterClassName = mcrProps.getProperty(FMCRProperties.SCHEDULING_FILTER_KEY);
-        //这里为null,default.properties中并未设置
+        } 
+//        else {
+//            System.out.println("\nWARNING: no value specified for property \"" + MCRProperties.SCHEDULING_STRATEGY_KEY + "\"");
+//            System.out.println("WARNING: using \"" + DefaultStrategy.class.getName() + "\", which will choose only one possible schedule");
+//            System.out.println("NOTE: See the \"edu.tamu.aser.scheduling.strategy\" package for a list of provided strategies\n");
+//            schedulingStrategy = new DefaultStrategy();
+//        }
+
+        /* Set the scheduling filter to be used */
+        String schedulingFilterClassName = mcrProps.getProperty(MCRProperties.SCHEDULING_FILTER_KEY);
+        //这里为null
         if (schedulingFilterClassName != null) {
             try {
                 schedulingFilter = (SchedulingFilter) Class.forName(schedulingFilterClassName).newInstance();
@@ -139,7 +157,57 @@ public class Scheduler {
                 System.exit(2);
             }
         } else {
+
             schedulingFilter = new DefaultFilter();
+        }
+    }
+
+    /**
+     * Should be called before a new exploration is going to be performed.
+     * 在一个新的exploration 开始前调用
+     * 
+     * 1) Informs the scheduling strategy that is being used that a new
+     * exploration will be performed. <br/>
+     * 通知 scheduling strategy 一个新的 exploration 开始了
+     * 2) Prepares for a schedule execution. 
+     * 开始新的 执行
+     */
+    public static void startingExploration(String name) {
+        
+        Listeners.fireStartingExploration(name);
+        schedulingStrategy.startingExploration();
+    }
+
+    /**
+     * Should be called after an exploration has been performed.
+     * 
+     * 1) Informs the listeners that the exploration has completed
+     */
+    public static void completedExploration() {
+        Listeners.fireCompletedExploration();
+    }
+
+    /**
+     * Should be called before a new schedule is going to be executed (during
+     * exploration). Does the following:
+     * 
+     * 1) (Re)Initializes the scheduler state. <br/>
+     * 2) Informs the scheduling strategy that is being used that a new schedule
+     * will be executed.
+     */
+    public static void startingScheduleExecution() {
+        
+//        long tid = Thread.currentThread().getId();
+//        JUnit4MCRRunner.rd = new RaceDetect(tid);
+        
+        Listeners.fireStartingSchedule();
+        schedulerStateLock.lock();
+        try {
+            resetState();
+            schedulingStrategy.startingScheduleExecution();
+            exploring = true;
+        } finally {
+            schedulerStateLock.unlock();
         }
     }
 
@@ -147,23 +215,20 @@ public class Scheduler {
      * Helper method to reinitialize non-final members for each schedule.
      */
     private static void initState() {
-
-//        if (Listeners.debugExploration) {
-//            // Use ordered map when debugging to eliminate print output
-//            // non-determinism
-//            liveThreadInfos = new TreeMap<Thread, ThreadInfo>(new Comparator<Thread>() {
-//                @Override
-//                public int compare(Thread o1, Thread o2) {
-//                    int idComparision = ((Long) o1.getId()).compareTo(o2.getId());
-//                    return idComparision == 0 ? o1.getName().compareTo(o2.getName()) : idComparision;
-//                }
-//            });
-//        } else {
-//            // Use efficient map when not debugging
-//            liveThreadInfos = new HashMap<Thread, ThreadInfo>();
-//        }
-        liveThreadInfos = new HashMap<Thread, ThreadInfo>();
-
+        if (Listeners.debugExploration) {
+            // Use ordered map when debugging to eliminate print output
+            // non-determinism
+            liveThreadInfos = new TreeMap<Thread, ThreadInfo>(new Comparator<Thread>() {
+                @Override
+                public int compare(Thread o1, Thread o2) {
+                    int idComparision = ((Long) o1.getId()).compareTo(o2.getId());
+                    return idComparision == 0 ? o1.getName().compareTo(o2.getName()) : idComparision;
+                }
+            });
+        } else {
+            // Use efficient map when not debugging
+            liveThreadInfos = new HashMap<Thread, ThreadInfo>();
+        }
         pausedThreadInfos = new TreeSet<ThreadInfo>();
         blockedThreadInfos = new HashSet<ThreadInfo>();
         informSchedulerOfCurrentThread();
@@ -183,60 +248,13 @@ public class Scheduler {
     }
 
     /**
-     * Should be called before a new exploration is going to be performed.
-     * 在一个新的exploration 开始前调用
-     *
-     * 1) Informs the scheduling strategy that is being used that a new
-     * exploration will be performed. <br/>
-     * 通知 scheduling strategy 一个新的 exploration 开始了
-     * 2) Prepares for a schedule execution.
-     * 开始新的 执行
-     */
-    public static void startingExploration(String name) {
-
-        //Listeners.fireStartingExploration(name);
-        schedulingStrategy.startingExploration();
-    }
-
-    /**
-     * Should be called before a new schedule is going to be executed (during
-     * exploration). Does the following:
-     *
-     * 1) (Re)Initializes the scheduler state. <br/>
-     * 2) Informs the scheduling strategy that is being used that a new schedule
-     * will be executed.
-     */
-    public static void startingScheduleExecution() {
-
-        //Listeners.fireStartingSchedule();
-        schedulerStateLock.lock();
-        try {
-            resetState();
-            schedulingStrategy.startingScheduleExecution();
-            exploring = true;
-        } finally {
-            schedulerStateLock.unlock();
-        }
-    }
-
-    /**
-     * Should be called after an exploration has been performed.
-     *
-     * 1) Informs the listeners that the exploration has completed
-     */
-    public static void completedExploration() {
-        //Listeners.fireCompletedExploration();
-    }
-
-    /**
      * Should be called at the end of a schedule execution (during exploration).
      * Does the following:
-     *
+     * 
      * 1) Informs the scheduling strategy that is being used that a new schedule
      * will be executed.
      */
     public static void completedScheduleExecution() {
-
         // TODO: schedulerStateLock.lock();
         /* Trying to make sure all threads are joined */
         while (!pausedThreadInfos.isEmpty()) {
@@ -255,10 +273,60 @@ public class Scheduler {
         // TODO: schedulerStateLock.unlock();
         /* Current schedule is done */
         exploring = false;
-
+        
         //what does this mean?
-        //Listeners.fireCompletedSchedule(schedulingStrategy.getChoicesMadeDuringThisSchedule());
+        Listeners.fireCompletedSchedule(schedulingStrategy.getChoicesMadeDuringThisSchedule());
         schedulingStrategy.completedScheduleExecution();
+    }
+
+    /**
+     * Returns the {@link SchedulingStrategy} being used to make scheduling
+     * decisions.
+     * 
+     * @return the {@link SchedulingStrategy} being used to make scheduling
+     *         decisions.
+     */
+    public static SchedulingStrategy getSchedulingStrategy() {
+        return schedulingStrategy;
+    }
+
+    /**
+     * Returns the {@link SchedulingFilter} being used to filter scheduling
+     * choices.
+     * 
+     * @return the {@link SchedulingFilter} being used to filter scheduling
+     *         choices.
+     */
+    public static SchedulingFilter getSchedulingFilter() {
+        return schedulingFilter;
+    }
+
+    /**
+     * Returns the {@link Map} of currently live {@link Thread}s to their
+     * {@link ThreadInfo}s.
+     * 
+     * @return the {@link Map} of currently live {@link Thread}s to their
+     *         {@link ThreadInfo}s.
+     */
+    public static Map<Thread, ThreadInfo> getLiveThreadInfos() {
+        if (Listeners.debugExploration) {
+            return Collections.unmodifiableSortedMap((SortedMap<Thread, ThreadInfo>) liveThreadInfos);
+        }
+        return Collections.unmodifiableMap(liveThreadInfos);
+    }
+
+    /**
+     * Returns the {@link Map} of currently paused {@link Thread}s to their
+     * {@link ThreadInfo}s.
+     * 
+     * @return the {@link Map} of currently paused {@link Thread}s to their
+     *         {@link ThreadInfo}s.
+     */
+    public static Set<ThreadInfo> getPausedThreadInfos() {
+        if (Listeners.debugExploration) {
+            return Collections.unmodifiableSortedSet((SortedSet<ThreadInfo>) pausedThreadInfos);
+        }
+        return Collections.unmodifiableSet((SortedSet<ThreadInfo>) pausedThreadInfos);
     }
 
     public static boolean canExecuteMoreSchedules() {
@@ -266,31 +334,29 @@ public class Scheduler {
     }
 
     public static void failureDetected(String errorMsg) {
-        //Listeners.fireFailureDetected(errorMsg, schedulingStrategy.getChoicesMadeDuringThisSchedule());
+        Listeners.fireFailureDetected(errorMsg, schedulingStrategy.getChoicesMadeDuringThisSchedule());
     }
-
 
     public static Reex_Semaphore getTerminationNotifer() {
         return deadlockOrFinishNotifier;
     }
 
-
     /******************************************************************
-     ******************************************************************
+     ****************************************************************** 
      **************** SCHEDULER THREAD & CHOICE POINT *****************
-     ******************************************************************
+     ****************************************************************** 
      ******************************************************************/
 
     /**
      * Start the scheduler thread!
      */
     static {
-
+        
         Thread schedulerThread = new Thread(new Runnable() {
             @Override
             public void run() {
                 boolean timeout = false;
-                while (true) {
+                while (true) {  
                     schedulerStateLock.lock();
                     try {
                         if (!liveThreadInfos.isEmpty()) {
@@ -298,19 +364,19 @@ public class Scheduler {
                                 // notify the runner of deadlock
                                 deadlockOrFinishNotifier.release();
                             }
-                            if (!pausedThreadInfos.isEmpty() &&
+                            if (!pausedThreadInfos.isEmpty() && 
                                     pausedThreadInfos.size() == liveThreadInfos.size() - blockedThreadInfos.size()) {
-
+                                
                                 ThreadInfo chosenPausedThreadInfo = (ThreadInfo) choose(pausedThreadInfos, ChoiceType.THREAD_TO_SCHEDULE);
                                 //System.out.println("Choose thread info:" + chosenPausedThreadInfo.toString() );
-
+                                
                                 if(chosenPausedThreadInfo!=null)
                                 {
                                     pausedThreadInfos.remove(chosenPausedThreadInfo);
                                     chosenPausedThreadInfo.getPausingSemaphore().release();
 
                                 }
-                                //something wrong
+                                //something wrong 
                                 //just release the lock, wait for the thread to be added to the paused thread
                                 else{}
                             }
@@ -326,8 +392,8 @@ public class Scheduler {
                             }
                         }
                         //JEFF: in case some blocking operation not tracked
-                        timeout = !schedulerWakeupCondition.await(500, Reex_TimeUnit.MILLISECONDS);
-
+                       timeout = !schedulerWakeupCondition.await(500, Reex_TimeUnit.MILLISECONDS);
+                        
                     } catch (Throwable exp) {
                         System.out.flush();
                         System.err.println("Uncaught exception in scheduler thread:");
@@ -351,14 +417,14 @@ public class Scheduler {
      * 在这里选择要切换线程 ？？？？？？
      * @param objectChoices
      *            {@link SortedSet} of {@link Object}s to choose from
-     *
+     * 
      * @param choiceType
      *            {@link ChoiceType} indicating what is being chosen
-     *
+     * 
      * @return the choice.
      */
     public static Object choose(SortedSet<? extends Object> objectChoices, ChoiceType choiceType) {
-
+        
         if (objectChoices.isEmpty()) {
             throw new IllegalArgumentException("There has to be at least one choice i.e. objectChoices cannot be empty");
         }
@@ -369,13 +435,13 @@ public class Scheduler {
             if (objectChoices.size() == 1) {  //when there is only one thread, it has to execute this thread
                 chosenObject = objectChoices.first();
                 // System.out.println("Choose only:" + ((ThreadInfo)chosenObject).getThread().getId());
-
+                
             } else {
-                //Listeners.fireMakingChoice(Collections.unmodifiableSortedSet(objectChoices), choiceType);
+                Listeners.fireMakingChoice(Collections.unmodifiableSortedSet(objectChoices), choiceType);
                 //System.out.println("before:" + objectChoices);
-                chosenObject = schedulingStrategy.choose(Collections.unmodifiableSortedSet(objectChoices), choiceType);
+                chosenObject = schedulingStrategy.choose(Collections.unmodifiableSortedSet(objectChoices), choiceType);            
                 //what does this mean?
-                //Listeners.fireChoiceMade(chosenObject);
+                Listeners.fireChoiceMade(chosenObject);
             }
             //System.out.println("chosen:" + chosenObject);
             return chosenObject;
@@ -384,10 +450,13 @@ public class Scheduler {
         }
     }
 
+    
+    //HOOKS ?
+    
     /******************************************************************
-     ******************************************************************
+     ****************************************************************** 
      ***************** INSTRUMENTATION HOOKS **************************
-     ******************************************************************
+     ****************************************************************** 
      ******************************************************************/
 
     /**
@@ -400,7 +469,7 @@ public class Scheduler {
     public static void beforeForking(Thread childThread) {
         // For MCR
         beforeEvent(new ThreadLifeEventDesc(EventType.BEGIN), true);
-
+        
         long tid = Thread.currentThread().getId();
         long tid_t = childThread.getId();
 
@@ -411,7 +480,7 @@ public class Scheduler {
                 currentThreadInfo.setEventDesc(new ThreadLifeEventDesc(EventType.FORK, childThread));
                 ThreadInfo childThreadInfo = new ThreadInfo(childThread);
                 liveThreadInfos.put(childThread, childThreadInfo);
-                //Listeners.fireBeforeForking(childThreadInfo);
+                Listeners.fireBeforeForking(childThreadInfo);
             } finally {
                 schedulerStateLock.unlock();
             }
@@ -421,12 +490,12 @@ public class Scheduler {
     /**
      * Executed after a (currently executing) parent thread forks a child thread
      * (using {@link Thread}.start).
-     *
+     * 
      * @param childThread
      *            the {@link Thread} that has been forked
      */
     public static void afterForking(Thread childThread) {
-        afterEvent(new ThreadLifeEventDesc(EventType.BEGIN));
+    	afterEvent(new ThreadLifeEventDesc(EventType.BEGIN));
     }
 
     /**
@@ -438,7 +507,7 @@ public class Scheduler {
             try {
                 ThreadInfo currentThreadInfo = liveThreadInfos.get(Thread.currentThread());
                 if(currentThreadInfo!=null)
-                {
+                {                
                     currentThreadInfo.incrementRunCount();
                     currentThreadInfo.setEventDesc(new ThreadLifeEventDesc(EventType.BEGIN));
                 }
@@ -482,7 +551,7 @@ public class Scheduler {
             }
         }
     }
-
+    
     /**
      * Called before a field is accessed, it first needs to get the lock
      * it is instrumented to the class
@@ -496,7 +565,7 @@ public class Scheduler {
             beforeEvent(new FieldAccessEventDesc(isRead ? EventType.READ : EventType.WRITE, owner, name, desc), true);
         }
     }
-
+    
     public static void beforeArrayAccess(boolean isRead) {
         if (exploring) {
             beforeEvent(new ArrayAccessEventDesc(isRead ? EventType.READ : EventType.WRITE), true);
@@ -505,7 +574,7 @@ public class Scheduler {
     /**
      * Print an error message for unexpected usage of Unsafe class during
      * exploration
-     *
+     * 
      * @param owner
      *            the class to which the method belongs
      * @param name
@@ -523,7 +592,7 @@ public class Scheduler {
 
     /**
      * Executed after a field is accessed.
-     *
+     * 
      * @param isRead
      *            whether the access is going to be a read
      * @param owner
@@ -538,45 +607,22 @@ public class Scheduler {
             afterEvent(new FieldAccessEventDesc(isRead ? EventType.READ : EventType.WRITE, owner, name, desc));
         }
     }
-
+    
     public static void afterArrayAccess(boolean isRead) {
         if (exploring) {
             afterEvent(new ArrayAccessEventDesc(isRead ? EventType.READ : EventType.WRITE));
         }
     }
 
-    public static void performSleep() {
-        ThreadInfo currentThreadInfo;
-        schedulerStateLock.lock();
-        try {
-            currentThreadInfo = liveThreadInfos.get(Thread.currentThread());
-            if(currentThreadInfo!=null)
-            {
-                pausedThreadInfos.add(currentThreadInfo);
-            }
-        } finally {
-            schedulerWakeupCondition.signal();
-        }
-        schedulerStateLock.unlock();
-
-        try {
-            if(currentThreadInfo!=null)
-                currentThreadInfo.getPausingSemaphore().acquire();
-
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
     /**
      * Executed instead of a monitor enter (synchronized keyword/block).
-     *
+     * 
      * @param lockObject
      *            the lock/monitor to be acquired
      */
     public static void performLock(Object lockObject) {
-
-        long tid = Thread.currentThread().getId();
+        
+        long tid = Thread.currentThread().getId(); 
         String addr = System.identityHashCode(lockObject)+"";
         //race detect
 //        JUnit4MCRRunner.rd.lockAccess(tid, addr);
@@ -591,7 +637,7 @@ public class Scheduler {
     /**
      * Executed instead of a monitor enter (synchronized keyword/block) and used
      * by {@link #performWait(Object)} to re-acquire released lock.
-     *
+     * 
      * @param lockObject
      *            the lock/monitor to be acquired
      * @param lockCount
@@ -610,7 +656,7 @@ public class Scheduler {
             try {
                 lockingThreadInfo = liveThreadInfos.get(Thread.currentThread());
                 //System.err.println("locking thread info " + lockingThreadInfo.toString());
-
+                
                 for (ThreadInfo liveThreadInfo : liveThreadInfos.values()) {
                     if (!liveThreadInfo.equals(lockingThreadInfo)) {
                         if (liveThreadInfo.getLockCount(lockObject) > 0) {
@@ -620,10 +666,10 @@ public class Scheduler {
                             blockedThreadInfos.add(lockingThreadInfo);
                             unblockThreadsBlockingForThreadBlock();
                             break;
-                        }
+                        }     
                     }
                 }
-
+                
                 if (lockAvailable) {
                     //System.err.println("acquir lock");
                     lockingThreadInfo.acquiredLock(lockObject, lockCount);
@@ -651,17 +697,17 @@ public class Scheduler {
 
     /**
      * Executed instead of a monitor exit (synchronized keyword/block).
-     *
+     * 
      * @param lockObject
      *            the lock/monitor to be released
      */
     public static void performUnlock(Object lockObject) {
-
-//        long tid = Thread.currentThread().getId();
-//        String addr = System.identityHashCode(lockObject)+"";
+        
+//        long tid = Thread.currentThread().getId();      
+//        String addr = System.identityHashCode(lockObject)+""; 
         //race detect
 //        JUnit4MCRRunner.rd.lockAccess(tid, addr);
-        //
+        //       
         if (exploring) {
             LockEventDesc unlockEventDesc = new LockEventDesc(EventType.UNLOCK, lockObject);
             beforeEvent(unlockEventDesc, true);
@@ -692,7 +738,7 @@ public class Scheduler {
 
     /**
      * Executed instead of {@link Object#wait()} invocations.
-     *
+     * 
      * @param waitObject
      *            the {@link Object} on which {@link #wait()} is being
      *            performed.
@@ -737,18 +783,18 @@ public class Scheduler {
             waitObject.wait();
         }
     }
-
+    
     /**
-     *
+     * 
      * Split wait into wait-lock
-     *
+     * 
      * @param waitObject
      * @throws InterruptedException
      */
     public static int performOnlyWait(Object waitObject) throws InterruptedException {
         if (exploring) {
             WaitNotifyEventDesc waitEventDesc = new WaitNotifyEventDesc(EventType.WAIT, waitObject);
-
+            
             beforeEvent(waitEventDesc, true);
 
             /*
@@ -765,9 +811,9 @@ public class Scheduler {
                 if (preWaitLockCount < 1) {
                     throw new IllegalMonitorStateException("Calling wait without holding object lock!");
                 }
-
+                
                 waitingThreadInfo.releasedLock(waitObject, preWaitLockCount);
-
+                
                 blockedThreadInfos.add(waitingThreadInfo);
                 unblockThreadsBlockingForThreadBlock();
 
@@ -787,9 +833,9 @@ public class Scheduler {
                 schedulerStateLock.unlock();
             }
             waitingThreadInfo.getPausingSemaphore().acquire();
-
-
-
+            
+            
+            
             afterEventNoIndexIncrease(waitEventDesc);
             return preWaitLockCount;
         } else {
@@ -800,7 +846,7 @@ public class Scheduler {
 
     /**
      * Executed instead of timed {@link Object#wait()} invocations.
-     *
+     * 
      * @param waitObject
      *            the {@link Object} on which {@link #wait()} is being
      *            performed.
@@ -818,7 +864,7 @@ public class Scheduler {
 
     /**
      * Executed instead of timed {@link Object#wait()} invocations.
-     *
+     * 
      * @param waitObject
      *            the {@link Object} on which {@link #wait()} is being
      *            performed.
@@ -836,8 +882,8 @@ public class Scheduler {
 
     /**
      * Executed instead of {@link Object#notify()} invocations.
-     *
-     * @param notifyObject
+     * 
+     * @param waitObject
      *            the {@link Object} on which {@link #notify()} is being
      *            performed.
      */
@@ -849,10 +895,10 @@ public class Scheduler {
             return 0;
         }
     }
-
+    
     public static void performNotifyOld(Object notifyObject) {
         if (exploring) {
-            performNotify(notifyObject, false);
+             performNotify(notifyObject, false);
         } else {
             notifyObject.notify();
         }
@@ -860,8 +906,8 @@ public class Scheduler {
 
     /**
      * Executed instead of {@link Object#notifyAll()} invocations.
-     *
-     * @param notifyAllObject
+     * 
+     * @param waitObject
      *            the {@link Object} on which {@link #notifyAll()} is being
      *            performed.
      */
@@ -877,7 +923,7 @@ public class Scheduler {
     /**
      * Executed instead of {@link Object#notify()} and
      * {@link Object#notifyAll()} invocations.
-     *
+     * 
      * @param notifyObject
      *            the {@link Object} on which {@link #notify()} or
      *            {@link #notifyAll()} is being performed.
@@ -905,21 +951,21 @@ public class Scheduler {
                 }
             }
             if (!notifyableThreadInfos.isEmpty()) {
-
+                
                 /*
                  * when it is a notifyAll event, any wait event can be waken up
                  * the randomness can't not be well modeled
                  * in order to simplify the problem, here I always take the first wait event that is to be waken up
                  */
-
+                
                 if (notifyAll) {
 //                    blockedThreadInfos.removeAll(notifyableThreadInfos);
 //                    for (ThreadInfo threadToNotify : notifyableThreadInfos) {
 //                        threadToNotify.getPausingSemaphore().release();
 //                    }
-
-                    //notifiedThreadId = 0;
-                    //change it to:
+                    
+                   //notifiedThreadId = 0;
+                   //change it to: 
                     ThreadInfo threadToNotify = (ThreadInfo) choose(notifyableThreadInfos, ChoiceType.THREAD_TO_NOTIFY);
                     blockedThreadInfos.remove(threadToNotify);
                     threadToNotify.getPausingSemaphore().release();
@@ -940,14 +986,14 @@ public class Scheduler {
 
     /**
      * Executed instead of {@link Thread#join()}.
-     *
+     * 
      * @param joinThread
-     *            the {@link Thread} on which  is being
+     *            the {@link Thread} on which {@link #join())} is being
      *            performed.
      * @throws InterruptedException
      */
     public static void performJoin(Thread joinThread) throws InterruptedException {
-
+        
         if (exploring) {
             JoinEventDesc joinEventDesc = new JoinEventDesc(EventType.JOIN, joinThread);
             // For MCR, original false
@@ -985,9 +1031,9 @@ public class Scheduler {
 
     /**
      * Executed instead of a timed {@link Thread#join()}.
-     *
+     * 
      * @param joinThread
-     *            the {@link Thread} on which  is being
+     *            the {@link Thread} on which {@link #join())} is being
      *            performed.
      * @throws InterruptedException
      */
@@ -1003,9 +1049,9 @@ public class Scheduler {
 
     /**
      * Executed instead of a timed {@link Thread#join()}.
-     *
+     * 
      * @param joinThread
-     *            the {@link Thread} on which  is being
+     *            the {@link Thread} on which {@link #join())} is being
      *            performed.
      * @throws InterruptedException
      */
@@ -1021,9 +1067,9 @@ public class Scheduler {
 
     /**
      * Executed instead of
-     * {@link sun.misc.Unsafe#park(boolean isAbsolute, long time)}. Needed to
+     * {@link Unsafe#park(boolean isAbsolute, long time)}. Needed to
      * implement support for j.u.c classes.
-     *
+     * 
      * @param isAbsolute
      *            determines milli/nano-seconds, see Unsafe
      * @param time
@@ -1071,9 +1117,9 @@ public class Scheduler {
     }
 
     /**
-     * Executed instead of {@link sun.misc.Unsafe#unpark(Object)}. Needed to
+     * Executed instead of {@link Unsafe#unpark(Object)}. Needed to
      * implement support for j.u.c classes.
-     *
+     * 
      * @param threadObject
      *            which thread to unblock, see Unsafe
      */
@@ -1118,7 +1164,7 @@ public class Scheduler {
      * Updates the {@link LocationDesc} of the current {@link Thread}'s
      * {@link ThreadInfo}. Executed before any of the events listed in
      * {@link EventType}.
-     *
+     * 
      * @param className
      * @param methodName
      * @param lineNumber
@@ -1138,17 +1184,15 @@ public class Scheduler {
         }
     }
 
-
-
     /******************************************************************
-     ******************************************************************
+     ****************************************************************** 
      ************************ HELPER METHODS **************************
-     ******************************************************************
+     ****************************************************************** 
      ******************************************************************/
 
     /**
      * Helper method called before a schedule relevant event.
-     *
+     * 
      * @param eventDesc
      *            {@link EventDesc} describing the schedule relevant event.
      * @param pause
@@ -1157,9 +1201,9 @@ public class Scheduler {
     private static void beforeEvent(EventDesc eventDesc, boolean pause) {
         ThreadInfo currentThreadInfo;
 
-        schedulerStateLock.lock();
+        schedulerStateLock.lock();       
         try {
-            //Listeners.fireBeforeEvent(eventDesc);
+            Listeners.fireBeforeEvent(eventDesc);
             currentThreadInfo = liveThreadInfos.get(Thread.currentThread());
             if(currentThreadInfo!=null)
             {
@@ -1174,7 +1218,7 @@ public class Scheduler {
             }
             schedulerStateLock.unlock();
         }
-
+        
         try {
             if (pause) {
                 if(currentThreadInfo!=null){
@@ -1187,18 +1231,115 @@ public class Scheduler {
             e.printStackTrace();
         }
     }
-
+    
+    
+    public static void performSleep() {
+        ThreadInfo currentThreadInfo;
+        schedulerStateLock.lock();
+        try {
+            currentThreadInfo = liveThreadInfos.get(Thread.currentThread());
+            if(currentThreadInfo!=null)
+            {
+                    pausedThreadInfos.add(currentThreadInfo);
+            }
+        } finally {
+                schedulerWakeupCondition.signal();
+            }
+            schedulerStateLock.unlock();
+        
+        try {
+                if(currentThreadInfo!=null)
+                currentThreadInfo.getPausingSemaphore().acquire();
+            
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
     /**
      * Helper method called after a schedule relevant event has been performed
-     *
+     * 
      * @param eventDesc
      *            {@link EventDesc} describing the even that was performed.
      */
     private static void afterEvent(EventDesc eventDesc) {
-
+        
         schedulerStateLock.lock();
-        //Listeners.fireAfterEvent(eventDesc);
+        Listeners.fireAfterEvent(eventDesc);
         schedulerStateLock.unlock();
+    }
+    
+    private static void afterEventNoIndexIncrease(EventDesc eventDesc) {
+    	    
+        schedulerStateLock.lock();
+        Listeners.fireAfterEvent(eventDesc);
+        schedulerStateLock.unlock();
+    }
+
+    /**
+     * Method used to replace fireEvent in IMUnit, to put constraints for exploration
+     * 
+     * @param event
+     *            IMUnit event name
+     */
+    public static void fireIMUnitEvent(String eventName) {
+        // If event does not need to wait for other events:
+        // 2) Add to happened events
+        // 1) Find any events waiting for this event and enable them
+        // If event needs to wait for other events:
+        // 1) Check if other events have happened, if so just add this to
+        // happened events
+        // 2) If other events have not happened, add this thread to blocked
+        // threads
+        if (!currentOrderings.isEmpty()) {
+            /* Collect the event(s) this event needs to wait for */
+            Set<Event> beforeEvents = new HashSet<Event>();
+            if (currentOrderings.containsKey(eventName)) {
+                beforeEvents.addAll(currentOrderings.get(eventName));
+            }
+            Thread currentThread = Thread.currentThread();
+            String qualifiedName = eventName + AT + currentThread.getName();
+            if (currentOrderings.containsKey(qualifiedName)) {
+                beforeEvents.addAll(currentOrderings.get(qualifiedName));
+            }
+
+            /* Wait for collected events to be completed */
+            if (!beforeEvents.isEmpty()) {
+                for (Event beforeEvent : beforeEvents) {
+                    if (beforeEvent instanceof SimpleEvent) {
+                        SimpleEvent simpleEvent = (SimpleEvent) beforeEvent;
+                        String simpleEventDesc = getEventDesc(simpleEvent);
+                        blockForIMUnitEvent(simpleEventDesc);
+                    } else if (beforeEvent instanceof BlockEvent) {
+                        BlockEvent blockEvent = (BlockEvent) beforeEvent;
+                        String blockEventDesc = getEventDesc(blockEvent);
+                        blockForIMUnitEvent(blockEventDesc);
+                        blockForThreadBlock(currentThread, blockEventDesc);
+                    }
+                }
+            }
+            schedulerStateLock.lock();
+            try {
+                /* This event has now happened */
+                currentHappenedEvents.put(eventName, currentThread);
+                currentHappenedEvents.put(qualifiedName, currentThread);
+                Set<ThreadInfo> unblock = new HashSet<ThreadInfo>();
+                for (ThreadInfo blockedThreadInfo : blockedThreadInfos) {
+                    EventDesc eventDesc = blockedThreadInfo.getEventDesc();
+                    if (eventDesc.getEventType().equals(EventType.BLOCKED_FOR_IMUNIT_EVENT)) {
+                        String blockingForEvent = ((BlockedForIMUnitEventDesc) eventDesc).getEvent();
+                        if (blockingForEvent.equals(eventName) || blockingForEvent.equals(qualifiedName)) {
+                            unblock.add(blockedThreadInfo);
+                        }
+                    }
+                }
+                blockedThreadInfos.removeAll(unblock);
+                for (ThreadInfo unblockThreadInfo : unblock) {
+                    unblockThreadInfo.getPausingSemaphore().release();
+                }
+            } finally {
+                schedulerStateLock.unlock();
+            }
+        }
     }
 
 
@@ -1219,10 +1360,114 @@ public class Scheduler {
         }
     }
 
-    private static void afterEventNoIndexIncrease(EventDesc eventDesc) {
-
+    private static void blockForThreadBlock(Thread currentThread, String blockEventDesc) {
+        boolean willBlock = false;
+        ThreadInfo currentThreadInfo = null;
         schedulerStateLock.lock();
-        //Listeners.fireAfterEvent(eventDesc);
-        schedulerStateLock.unlock();
+        try {
+            currentThreadInfo = liveThreadInfos.get(currentThread);
+            Thread blockEventThread = currentHappenedEvents.get(blockEventDesc);
+            ThreadInfo blockEventThreadInfo = liveThreadInfos.get(blockEventThread);
+            if (!blockedThreadInfos.contains(blockEventThreadInfo)) {
+                currentThreadInfo.setEventDesc(new BlockedForThreadBlockDesc(blockEventThread));
+                blockedThreadInfos.add(currentThreadInfo);
+                unblockThreadsBlockingForThreadBlock();
+                willBlock = true;
+            }
+        } finally {
+            if (willBlock) {
+                schedulerWakeupCondition.signal();
+            }
+            schedulerStateLock.unlock();
+        }
+        try {
+            if (willBlock) {
+                currentThreadInfo.getPausingSemaphore().acquire();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            System.exit(2);
+        }
     }
+
+    private static void blockForIMUnitEvent(String blockEventDesc) {
+        boolean willBlock = false;
+        ThreadInfo currentThreadInfo = null;
+        schedulerStateLock.lock();
+        try {
+            currentThreadInfo = liveThreadInfos.get(Thread.currentThread());
+            if (!currentHappenedEvents.containsKey(blockEventDesc)) {
+                currentThreadInfo.setEventDesc(new BlockedForIMUnitEventDesc(blockEventDesc));
+                blockedThreadInfos.add(currentThreadInfo);
+                unblockThreadsBlockingForThreadBlock();
+                willBlock = true;
+            }
+        } finally {
+            if (willBlock) {
+                schedulerWakeupCondition.signal();
+            }
+            schedulerStateLock.unlock();
+        }
+        try {
+            if (willBlock) {
+                currentThreadInfo.getPausingSemaphore().acquire();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            System.exit(2);
+        }
+    }
+
+    public static void setIMUnitSchedule(String name, Orderings orderings) {
+        currentSchedule = name;
+        currentOrderings.clear();
+        for (Ordering partialOrder : orderings.getOrderings()) {
+            SimpleEvent afterEvent = partialOrder.getAfterEvent();
+            String afterEventDesc = getEventDesc(afterEvent);
+            Set<Event> beforeEvents = currentOrderings.get(afterEventDesc);
+            if (beforeEvents == null) {
+                beforeEvents = new HashSet<Event>();
+                currentOrderings.put(afterEventDesc, beforeEvents);
+            }
+            beforeEvents.add(partialOrder.getBeforeEvent());
+        }
+        currentHappenedEvents.clear();
+    }
+
+    public static void clearIMUnitSchedule() {
+        currentSchedule = CLEARED_SCHEDULE;
+        currentOrderings.clear();
+        currentHappenedEvents.clear();
+    }
+
+    /**
+     * Helper method for constructing the description of a {@link SimpleEvent}.
+     * 
+     * @param simpleEvent
+     * @return description of simpleEvent
+     */
+    private static String getEventDesc(SimpleEvent simpleEvent) {
+        String eventDesc = simpleEvent.getEventName().getName();
+        Name eventThreadName = simpleEvent.getThreadName();
+        if (eventThreadName.getName() != null) {
+            eventDesc += AT + eventThreadName.getName();
+        }
+        return eventDesc;
+    }
+
+    /**
+     * Helper method for constructing the description of a {@link BlockEvent}.
+     * 
+     * @param blockEvent
+     * @return description of blockEvent
+     */
+    private static String getEventDesc(BlockEvent blockEvent) {
+        String eventDesc = blockEvent.getBlockAfterEventName().getName();
+        Name eventThreadName = blockEvent.getThreadName();
+        if (eventThreadName.getName() != null) {
+            eventDesc += AT + eventThreadName.getName();
+        }
+        return eventDesc;
+    }
+
 }
