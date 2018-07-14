@@ -81,7 +81,7 @@ public class ConstraintsSolving
         CMD = new ArrayList<>();   //Z3 求解指令
         
         if (OS.indexOf("mac") >= 0) {
-        		Z3_PATH = "/usr/local/bin/z3";
+        		Z3_PATH = "/Users/ningge/codes/java/FMCR/z3-4.7.1-x64-osx-10.11.6/bin/z3";
 		} else {
 			Z3_PATH = "../z3-ubuntu/bin/z3";
 		}

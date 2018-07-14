@@ -8,6 +8,8 @@ import java.util.Vector;
 import com.sun.xml.internal.bind.v2.runtime.output.SAXOutput;
 import engine.config.Configuration;
 import engine.trace.Trace;
+import pattern.DDMUtil;
+import pattern.Pattern;
 
 public class StartExploring implements Runnable {
 
@@ -16,6 +18,7 @@ public class StartExploring implements Runnable {
 	private Vector<String> schedule_prefix;
 
 	private Queue<List<String>> exploreQueue;
+	static List<Trace> traces = new ArrayList<>();
 
 	public static class BoxInt {
 
@@ -70,6 +73,22 @@ public class StartExploring implements Runnable {
 			
 			//System.out.println("StartExploring1:" + exploreQueue);
 			traceObj.finishedLoading(true);
+
+			if (traces.size() < 2) {
+				traces.add(traceObj);
+			} else {
+				List<Pattern> pattern = DDMUtil.getAllPatterns(traces.get(0));
+				List<Pattern> pattern1 = DDMUtil.getAllPatterns(traces.get(1));
+
+				List<Pattern> differtPatterns = DDMUtil.getDifferentPatterns(pattern1, pattern);
+
+				for (Pattern p: differtPatterns) {
+					System.out.println(p.generateStopPattern());
+				}
+			}
+
+
+
 			ExploreSeedInterleavings.execute(traceObj, schedule_prefix);
 			//System.out.println("StartExploring2:" + exploreQueue);
 			ExploreSeedInterleavings.memUsed += ExploreSeedInterleavings.memSize(ExploreSeedInterleavings.mapPrefixEquivalent);
